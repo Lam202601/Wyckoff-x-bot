@@ -68,8 +68,8 @@ with tab1:
             client = genai.Client(api_key=st.session_state.gemini_api_key)
             
             uploaded_files = st.file_uploader(
-                "Kéo thả NHIỀU Video MP4 hoặc sách PDF vào đây cùng lúc (Max 2GB)", 
-                type=['mp4', 'pdf', 'txt'], 
+                "Kéo thả NHIỀU Video MP4 hoặc sách PDF vào đây cùng lúc (Max 1GB/lần)", 
+                type=['mp4', 'pdf','PNG','JPEG','PPT', 'txt'], 
                 accept_multiple_files=True
             )
             
@@ -79,7 +79,9 @@ with tab1:
                         with st.spinner(f"Đang nhai file: {uploaded_file.name}..."):
                             try:
                                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
-                                    tmp.write(uploaded_file.getvalue())
+                                    # VŨ KHÍ TỐI THƯỢNG CỨU RAM: Dùng getbuffer() thay cho getvalue()
+                                    # Lệnh này không nạp video vào RAM, mà truyền thẳng dữ liệu xuống ổ cứng tạm
+                                    tmp.write(uploaded_file.getbuffer()) 
                                     tmp_path = tmp.name
                                     
                                 # Cú pháp upload mới
