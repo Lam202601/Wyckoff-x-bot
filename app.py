@@ -1,62 +1,105 @@
 import streamlit as st
+import google.generativeai as genai
+import tempfile
+import time
+import os
 
 # ==========================================
-# 1. CÀI ĐẶT TỔNG QUAN (SETUP CONFIG)
+# 1. CÀI ĐẶT TỔNG QUAN
 # ==========================================
-st.set_page_config(
-    page_title="ROMAN-X | Agentic Quant",
-    page_icon="🏛️",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="ROMAN-X | Agentic Quant", page_icon="🏛️", layout="wide")
 
 # ==========================================
 # 2. KHỞI TẠO BỘ NHỚ LÕI (AGENT MEMORY)
 # ==========================================
-# Nơi lưu trữ "tâm trí" của các Tác tử để chúng giao tiếp với nhau
-if 'knowledge_base_ready' not in st.session_state:
-    st.session_state.knowledge_base_ready = False # Trạng thái Lò luyện đan
-if 'xray_matrix' not in st.session_state:
-    st.session_state.xray_matrix = None           # Dữ liệu hình học từ Đặc vụ Quant
-if 'current_phase' not in st.session_state:
-    st.session_state.current_phase = "Chưa xác định" # Pha Wyckoff hiện tại
 if 'gemini_api_key' not in st.session_state:
-    st.session_state.gemini_api_key = ""          # Chìa khóa gọi Google AI
+    st.session_state.gemini_api_key = ""
+if 'uploaded_gemini_file' not in st.session_state:
+    st.session_state.uploaded_gemini_file = None
 
 # ==========================================
-# 3. GIAO DIỆN ĐIỀU HÀNH TỔNG (DASHBOARD)
+# 3. GIAO DIỆN ĐIỀU HÀNH
 # ==========================================
 st.title("🏛️ ROMAN-X: HỘI ĐỒNG ĐẦU TƯ TỰ TRỊ")
-st.markdown("*Hệ thống Multi-Agent AI - Kế thừa di sản Wyckoff & Roman Bogomazov*")
+st.markdown("*Bộ não AI nạp trực tiếp Video/PDF bài giảng thực chiến của Roman Bogomazov*")
 st.divider()
 
-# ==========================================
-# 4. CHIA LÃNH ĐỊA CHO CÁC TÁC TỬ (TABS)
-# ==========================================
-tab1, tab2, tab3 = st.tabs([
-    "🧠 BỘ NÃO (Roman's Brain - RAG)",
-    "📐 X-RAY (Đặc vụ Định lượng Hình học)",
-    "🎯 THỰC CHIẾN (Tác tử Vào lệnh - POE)"
-])
+tab1, tab2, tab3 = st.tabs(["🧠 BỘ NÃO (Lò Luyện Đan)", "📐 X-RAY (Đọc Chart)", "🎯 THỰC CHIẾN (POE)"])
 
-# --- PHÒNG SỐ 1: LÒ LUYỆN ĐAN ---
+# ==========================================
+# PHÒNG SỐ 1: LÒ LUYỆN ĐAN (HOẠT ĐỘNG 100%)
+# ==========================================
 with tab1:
-    st.header("Lò Luyện Đan: Nạp kiến thức cho AI")
-    st.info("Trạng thái: Đang chờ kết nối API và Dữ liệu đầu vào.")
+    col1, col2 = st.columns([1, 2])
     
-    # Khu vực sếp nhập API Key để đánh thức hệ thống
-    api_input = st.text_input("🔑 Nhập Gemini API Key để khởi động Đặc vụ Roman:", type="password", value=st.session_state.gemini_api_key)
-    if st.button("Lưu Chìa Khóa"):
-        st.session_state.gemini_api_key = api_input
-        st.success("Đã lưu chìa khóa! Đặc vụ sẵn sàng nhận lệnh.")
-        st.rerun()
+    with col1:
+        st.header("🔑 1. Đánh thức Đặc vụ")
+        api_input = st.text_input("Nhập Gemini API Key (Bản Free vẫn chạy tốt):", type="password", value=st.session_state.gemini_api_key)
+        if st.button("Kích hoạt Hệ thống"):
+            st.session_state.gemini_api_key = api_input
+            st.rerun()
 
-# --- PHÒNG SỐ 2: ĐÔI MẮT LƯỢNG HÓA ---
+    with col2:
+        st.header("📚 2. Nạp Di sản của Roman")
+        if not st.session_state.gemini_api_key:
+            st.warning("⚠️ Vui lòng nhập API Key bên trái để mở khóa Lò Luyện Đan.")
+        else:
+            genai.configure(api_key=st.session_state.gemini_api_key)
+            
+            # Khung tải file trực tiếp (Hỗ trợ MP4 Video và PDF)
+            uploaded_file = st.file_uploader("Kéo thả Video MP4 hoặc sách PDF của thầy Roman vào đây", type=['mp4', 'pdf', 'txt'])
+            
+            if uploaded_file:
+                if st.button("🚀 BẮT ĐẦU NUỐT TÀI LIỆU VÀO NÃO", use_container_width=True):
+                    with st.spinner("Đang đẩy file lên hệ thống lõi của Google (Gemini File API)... Xin kiên nhẫn đợi!"):
+                        try:
+                            # Tạo file tạm trên máy chủ Streamlit để chuẩn bị phóng lên Google
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                                tmp.write(uploaded_file.getvalue())
+                                tmp_path = tmp.name
+                                
+                            # Phóng file lên Gemini
+                            gemini_file = genai.upload_file(tmp_path)
+                            
+                            # Vòng lặp chờ đợi (Video MP4 cần thời gian để Google xử lý hình ảnh/âm thanh)
+                            while gemini_file.state.name == "PROCESSING":
+                                st.info("Hệ thống Google đang bóc tách từng khung hình và giọng nói trong Video... Đợi thêm vài giây.")
+                                time.sleep(5)
+                                gemini_file = genai.get_file(gemini_file.name)
+                                
+                            st.session_state.uploaded_gemini_file = gemini_file
+                            st.success(f"✅ Đã nuốt xong tài liệu: {gemini_file.name} (Sẵn sàng khai thác!)")
+                            
+                            # Dọn dẹp file rác
+                            os.remove(tmp_path)
+                        except Exception as e:
+                            st.error(f"❌ Lỗi khi nuốt tài liệu: {e}")
+
+    st.divider()
+    
+    # KHI ĐÃ CÓ FILE TRONG NÃO -> HIỆN KHUNG CHAT ĐỂ BÓC TÁCH THUẬT TOÁN
+    if st.session_state.uploaded_gemini_file:
+        st.subheader("🕵️ Trực tiếp tra khảo Đặc vụ Roman")
+        st.caption("Ví dụ: 'Dựa vào video này, thầy Roman định nghĩa thế nào là một cú Spring hợp lệ? Dấu hiệu Volume ra sao?'")
+        
+        user_prompt = st.text_area("Ra lệnh trích xuất thuật toán:")
+        if st.button("Khai thác Dữ liệu"):
+            with st.spinner("Đặc vụ đang tua lại tài liệu/video để tìm câu trả lời..."):
+                try:
+                    # GỌI ĐÍCH DANH GEMINI 1.5 PRO ĐỂ ĐỌC VIDEO/TÀI LIỆU NẶNG
+                    model = genai.GenerativeModel('models/gemini-1.5-pro')
+                    response = model.generate_content([st.session_state.uploaded_gemini_file, user_prompt])
+                    
+                    st.markdown("### 📜 Báo cáo từ Đặc vụ:")
+                    st.info(response.text)
+                except Exception as e:
+                    st.error(f"❌ Lỗi phản hồi: {e}")
+
+# --- PHÒNG SỐ 2 & 3 (Giữ nguyên chờ sếp duyệt xong Tab 1) ---
 with tab2:
     st.header("Đôi Mắt X-Ray: Giải mã cấu trúc giá")
-    st.info("Trạng thái: Đang chờ thuật toán ATR và Volume Cap.")
+    st.info("Trạng thái: Chờ ráp thuật toán PineScript lượng hóa độ dốc (ATR).")
 
-# --- PHÒNG SỐ 3: BÀN CỜ THỰC CHIẾN ---
 with tab3:
     st.header("Bàn Cờ Thực Chiến: Quản trị Rủi Ro & POE")
-    st.info("Trạng thái: Chờ tín hiệu Spring/SoS từ Đặc vụ Roman.")
+    st.info("Trạng thái: Chờ thiết lập logic từ Đặc vụ Roman.")
