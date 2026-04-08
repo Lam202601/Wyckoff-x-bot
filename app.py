@@ -38,11 +38,12 @@ st.divider()
 tab1, tab2, tab3 = st.tabs(["🧠 BỘ NÃO (Lò Luyện Đan)", "📐 X-RAY (Đọc Chart)", "🎯 THỰC CHIẾN (POE)"])
 
 # ==========================================
-# PHÒNG SỐ 1: LÒ LUYỆN ĐAN
+# PHÒNG SỐ 1: LÒ LUYỆN ĐAN (CÔNG NGHỆ LƯU TRỮ CLOUD)
 # ==========================================
 with tab1:
     col1, col2 = st.columns([1, 2])
     
+    # KHO BÊN TRÁI: HIỂN THỊ TRÍ NHỚ CỦA AI TRÊN GOOGLE CLOUD
     with col1:
         st.header("🔑 1. Đánh thức Đặc vụ")
         api_input = st.text_input("Nhập Gemini API Key:", type="password", value=st.session_state.gemini_api_key)
@@ -51,66 +52,83 @@ with tab1:
             st.session_state.gemini_api_key = api_input
             with open(KEY_FILE, "w") as f:
                 json.dump({"GEMINI_API_KEY": api_input}, f)
-            st.success("✅ Đã đúc chìa khóa vào Két sắt ổ cứng!")
+            st.success("✅ Đã đúc chìa khóa vào Két sắt!")
             st.rerun()
 
-        if len(st.session_state.uploaded_gemini_files) > 0:
-            if st.button("🗑️ Xóa sạch bộ nhớ AI hiện tại"):
-                st.session_state.uploaded_gemini_files = []
-                st.rerun()
+        st.divider()
+        st.subheader("🗄️ Trí Nhớ Vĩnh Cửu (Trên Google)")
+        cloud_files = []
+        if st.session_state.gemini_api_key:
+            client = genai.Client(api_key=st.session_state.gemini_api_key)
+            try:
+                # Đòn quyết định: Gọi Google tải danh sách file đã lưu trên mây về
+                cloud_files = list(client.files.list())
+                if len(cloud_files) == 0:
+                    st.info("Não đang trống rỗng. Hãy bơm tài liệu!")
+                else:
+                    st.success(f"Não đang ghi nhớ {len(cloud_files)} tài liệu.")
+                    for f in cloud_files:
+                        st.caption(f"📄 {f.display_name or f.name}")
+                    
+                    # Nút tẩy não vĩnh viễn trên Google (Tránh tràn 20GB)
+                    if st.button("🗑️ XÓA TOÀN BỘ KÝ ỨC TRÊN GOOGLE"):
+                        with st.spinner("Đang tẩy não..."):
+                            for f in cloud_files:
+                                client.files.delete(name=f.name)
+                        st.rerun()
+            except Exception as e:
+                st.error("Chưa kết nối được kho dữ liệu.")
 
+    # KHO BÊN PHẢI: TRẠM TRUNG CHUYỂN BƠM DỮ LIỆU
     with col2:
-        st.header("📚 2. Nạp Di sản của Roman")
+        st.header("📚 2. Bơm Kiến Thức Mới")
         if not st.session_state.gemini_api_key:
             st.warning("⚠️ Vui lòng nhập API Key bên trái để mở khóa Lò Luyện Đan.")
         else:
-            # Khởi tạo Client theo cú pháp mới của Google GenAI
-            client = genai.Client(api_key=st.session_state.gemini_api_key)
-            
-            uploaded_files = st.file_uploader(
-                "Kéo thả NHIỀU Video MP4 hoặc sách PDF vào đây cùng lúc (Max 1GB/lần)", 
-                type=['mp4', 'pdf','PNG','JPEG','PPT', 'txt'], 
-                accept_multiple_files=True
+            # Ép người dùng nạp TỪNG FILE MỘT để Streamlit không bao giờ bị sặc RAM
+            uploaded_file = st.file_uploader(
+                "Kéo thả 1 File MP4/PDF vào đây (Tải xong file này mới tải tiếp file khác)", 
+                type=['mp4', 'pdf', 'txt'], 
+                accept_multiple_files=False 
             )
             
-            if uploaded_files:
-                if st.button(f"🚀 BẮT ĐẦU NUỐT {len(uploaded_files)} TÀI LIỆU VÀO NÃO", use_container_width=True):
-                    for uploaded_file in uploaded_files:
-                        with st.spinner(f"Đang nhai file: {uploaded_file.name}..."):
-                            try:
-                                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
-                                    # VŨ KHÍ TỐI THƯỢNG CỨU RAM: Dùng getbuffer() thay cho getvalue()
-                                    # Lệnh này không nạp video vào RAM, mà truyền thẳng dữ liệu xuống ổ cứng tạm
-                                    tmp.write(uploaded_file.getbuffer()) 
-                                    tmp_path = tmp.name
-                                    
-                                # Cú pháp upload mới
-                                gemini_file = client.files.upload(file=tmp_path)
+            if uploaded_file:
+                if st.button("🚀 ĐẨY FILE NÀY LÊN MÂY", use_container_width=True):
+                    with st.spinner(f"Đang bơm {uploaded_file.name} vào Não..."):
+                        try:
+                            # Đổ phễu dữ liệu
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                                tmp.write(uploaded_file.getbuffer())
+                                tmp_path = tmp.name
                                 
-                                # Chờ Google xử lý
-                                while gemini_file.state == "PROCESSING":
-                                    time.sleep(5)
-                                    gemini_file = client.files.get(name=gemini_file.name)
-                                    
-                                st.session_state.uploaded_gemini_files.append(gemini_file)
-                                st.success(f"✅ Đã nuốt xong: {gemini_file.name}")
-                                os.remove(tmp_path)
-                            except Exception as e:
-                                st.error(f"❌ Lỗi khi nuốt {uploaded_file.name}: {e}")
+                            # Phóng lên mây Google
+                            gemini_file = client.files.upload(file=tmp_path, config={'display_name': uploaded_file.name})
+                            
+                            while gemini_file.state == "PROCESSING":
+                                time.sleep(5)
+                                gemini_file = client.files.get(name=gemini_file.name)
+                                
+                            st.success(f"✅ Đã bơm xong! RAM Streamlit được giải phóng.")
+                            os.remove(tmp_path)
+                            time.sleep(2) # Nghỉ 2s rồi F5 lại để hiện file sang cột bên trái
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Lỗi khi bơm file: {e}")
 
     st.divider()
     
-    if len(st.session_state.uploaded_gemini_files) > 0:
-        st.subheader(f"🕵️ Trực tiếp tra khảo Đặc vụ Roman (Đang nhớ {len(st.session_state.uploaded_gemini_files)} tài liệu)")
-        st.caption("AI sẽ tự động tổng hợp kiến thức chéo từ TẤT CẢ các video và PDF sếp đã nạp vào.")
+    # KHU VỰC TRA KHẢO
+    if len(cloud_files) > 0:
+        st.subheader(f"🕵️ Trực tiếp tra khảo Đặc vụ Roman")
+        st.caption(f"Đặc vụ sẽ tự ráp nối logic từ toàn bộ {len(cloud_files)} file ở Cột Bên Trái để trả lời sếp.")
         
         user_prompt = st.text_area("Ra lệnh trích xuất thuật toán:")
         if st.button("Khai thác Dữ liệu"):
-            with st.spinner("Đặc vụ đang kết nối các luồng thông tin để tìm câu trả lời..."):
+            with st.spinner(f"Đặc vụ đang lục lọi {len(cloud_files)} tài liệu... Xin kiên nhẫn đợi (có thể mất 1-2 phút)!"):
                 try:
-                    # Cú pháp gọi AI mới nhất
-                    client = genai.Client(api_key=st.session_state.gemini_api_key)
-                    prompt_parts = st.session_state.uploaded_gemini_files + [user_prompt]
+                    # Lọc lấy những file đã chạy xong (ACTIVE)
+                    active_files = [f for f in cloud_files if f.state == "ACTIVE"]
+                    prompt_parts = active_files + [user_prompt]
                     
                     response = client.models.generate_content(
                         model='gemini-1.5-pro',
