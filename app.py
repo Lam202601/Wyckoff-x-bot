@@ -129,7 +129,7 @@ Hãy chưng cất bài giảng này thành 1 file Wiki Markdown siêu chi tiết
                     prompt_parts = st.session_state.uploaded_gemini_files + [master_prompt]
                     
                     response = client.models.generate_content(
-                        model='gemini-1.5-pro',
+                        model='gemini-2.5-flash',
                         contents=prompt_parts
                     )
                     
