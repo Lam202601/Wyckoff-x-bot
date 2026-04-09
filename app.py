@@ -38,12 +38,11 @@ st.divider()
 tab1, tab2, tab3 = st.tabs(["🧠 BỘ NÃO (Lò Luyện Đan)", "📐 X-RAY (Đọc Chart)", "🎯 THỰC CHIẾN (POE)"])
 
 # ==========================================
-# PHÒNG SỐ 1: LÒ LUYỆN ĐAN (CÔNG NGHỆ LƯU TRỮ CLOUD)
+# PHÒNG SỐ 1: LÒ LUYỆN ĐAN (CỐI XAY WIKI)
 # ==========================================
 with tab1:
     col1, col2 = st.columns([1, 2])
     
-    # KHO BÊN TRÁI: HIỂN THỊ TRÍ NHỚ CỦA AI TRÊN GOOGLE CLOUD
     with col1:
         st.header("🔑 1. Đánh thức Đặc vụ")
         api_input = st.text_input("Nhập Gemini API Key:", type="password", value=st.session_state.gemini_api_key)
@@ -55,89 +54,106 @@ with tab1:
             st.success("✅ Đã đúc chìa khóa vào Két sắt!")
             st.rerun()
 
-        st.divider()
-        st.subheader("🗄️ Trí Nhớ Vĩnh Cửu (Trên Google)")
-        cloud_files = []
-        if st.session_state.gemini_api_key:
-            client = genai.Client(api_key=st.session_state.gemini_api_key)
-            try:
-                # Đòn quyết định: Gọi Google tải danh sách file đã lưu trên mây về
-                cloud_files = list(client.files.list())
-                if len(cloud_files) == 0:
-                    st.info("Não đang trống rỗng. Hãy bơm tài liệu!")
-                else:
-                    st.success(f"Não đang ghi nhớ {len(cloud_files)} tài liệu.")
-                    for f in cloud_files:
-                        st.caption(f"📄 {f.display_name or f.name}")
-                    
-                    # Nút tẩy não vĩnh viễn trên Google (Tránh tràn 20GB)
-                    if st.button("🗑️ XÓA TOÀN BỘ KÝ ỨC TRÊN GOOGLE"):
-                        with st.spinner("Đang tẩy não..."):
-                            for f in cloud_files:
-                                client.files.delete(name=f.name)
-                        st.rerun()
-            except Exception as e:
-                st.error("Chưa kết nối được kho dữ liệu.")
+        if len(st.session_state.uploaded_gemini_files) > 0:
+            if st.button("🗑️ Xóa sạch bộ nhớ tạm (Xóa MP4 trên mây)"):
+                st.session_state.uploaded_gemini_files = []
+                if 'latest_wiki_content' in st.session_state:
+                    del st.session_state['latest_wiki_content']
+                st.rerun()
+                
+        st.info("💡 Quy trình: Nạp File -> AI Tiêu hóa -> Bấm tải file Text (.md) về ném vào thư mục Obsidian trên máy sếp.")
 
-    # KHO BÊN PHẢI: TRẠM TRUNG CHUYỂN BƠM DỮ LIỆU
     with col2:
-        st.header("📚 2. Bơm Kiến Thức Mới")
+        st.header("📚 2. Nạp Di sản của Roman")
         if not st.session_state.gemini_api_key:
-            st.warning("⚠️ Vui lòng nhập API Key bên trái để mở khóa Lò Luyện Đan.")
+            st.warning("⚠️ Vui lòng nhập API Key bên trái để mở khóa.")
         else:
-            # Ép người dùng nạp TỪNG FILE MỘT để Streamlit không bao giờ bị sặc RAM
-            uploaded_file = st.file_uploader(
-                "Kéo thả 1 File MP4/PDF vào đây (Tải xong file này mới tải tiếp file khác)", 
+            client = genai.Client(api_key=st.session_state.gemini_api_key)
+            
+            uploaded_files = st.file_uploader(
+                "Kéo thả Video MP4 hoặc sách PDF vào đây", 
                 type=['mp4', 'pdf', 'txt'], 
-                accept_multiple_files=False 
+                accept_multiple_files=True
             )
             
-            if uploaded_file:
-                if st.button("🚀 ĐẨY FILE NÀY LÊN MÂY", use_container_width=True):
-                    with st.spinner(f"Đang bơm {uploaded_file.name} vào Não..."):
-                        try:
-                            # Đổ phễu dữ liệu
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
-                                tmp.write(uploaded_file.getbuffer())
-                                tmp_path = tmp.name
+            if uploaded_files:
+                if st.button(f"🚀 BẮT ĐẦU NUỐT {len(uploaded_files)} TÀI LIỆU", use_container_width=True):
+                    for uploaded_file in uploaded_files:
+                        with st.spinner(f"Đang nhai file: {uploaded_file.name}..."):
+                            try:
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
+                                    tmp.write(uploaded_file.getbuffer()) 
+                                    tmp_path = tmp.name
                                 
-                            # Phóng lên mây Google
-                            gemini_file = client.files.upload(file=tmp_path, config={'display_name': uploaded_file.name})
-                            
-                            while gemini_file.state == "PROCESSING":
-                                time.sleep(5)
-                                gemini_file = client.files.get(name=gemini_file.name)
+                                gemini_file = client.files.upload(file=tmp_path)
                                 
-                            st.success(f"✅ Đã bơm xong! RAM Streamlit được giải phóng.")
-                            os.remove(tmp_path)
-                            time.sleep(2) # Nghỉ 2s rồi F5 lại để hiện file sang cột bên trái
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Lỗi khi bơm file: {e}")
+                                while gemini_file.state == "PROCESSING":
+                                    time.sleep(5)
+                                    gemini_file = client.files.get(name=gemini_file.name)
+                                    
+                                st.session_state.uploaded_gemini_files.append(gemini_file)
+                                st.success(f"✅ Đã nuốt xong: {gemini_file.name}")
+                                os.remove(tmp_path)
+                            except Exception as e:
+                                st.error(f"❌ Lỗi khi nuốt: {e}")
 
     st.divider()
     
-    # KHU VỰC TRA KHẢO
-    if len(cloud_files) > 0:
-        st.subheader(f"🕵️ Trực tiếp tra khảo Đặc vụ Roman")
-        st.caption(f"Đặc vụ sẽ tự ráp nối logic từ toàn bộ {len(cloud_files)} file ở Cột Bên Trái để trả lời sếp.")
+    if len(st.session_state.uploaded_gemini_files) > 0:
+        st.subheader("🕵️ Chưng Cất Tri Thức (Ép Xung AI)")
         
-        user_prompt = st.text_area("Ra lệnh trích xuất thuật toán:")
-        if st.button("Khai thác Dữ liệu"):
-            with st.spinner(f"Đặc vụ đang lục lọi {len(cloud_files)} tài liệu... Xin kiên nhẫn đợi (có thể mất 1-2 phút)!"):
+        master_prompt = """Mày là Đặc vụ Wyckoff Quant. Hãy xem kỹ các video/tài liệu tao vừa nạp, đặc biệt LẮNG NGHE kỹ lời thầy Roman Bogomazov giảng giải và đối chiếu với biểu đồ.
+Hãy chưng cất bài giảng này thành 1 file Wiki Markdown siêu chi tiết. BẮT BUỘC dùng Tiếng Việt và xuất theo đúng cấu trúc sau:
+
+# [Tên Chủ Đề Bài Học Ngắn Gọn]
+**Metadata:**
+- **Tags:** #Wyckoff_Theory, #Roman_Bogomazov
+- **Links:** (Gắn link tới các khái niệm khác bằng cú pháp [[Tên Khái Niệm]], ví dụ: [[Pha C]], [[Spring]], [[VSA]])
+
+**1. Tâm pháp gốc (Roman's Insight):**
+(Trích xuất những câu nói, lời dặn dò quan trọng nhất của thầy Roman bằng lời).
+
+**2. Dấu hiệu Hành vi (Price/Volume):**
+(Cụ thể giá và khối lượng di chuyển thế nào?)
+
+**3. Ánh xạ Định lượng (Quant Logic):**
+(Nếu phải viết code để tìm dấu hiệu này trên biểu đồ, điều kiện toán học là gì?)
+
+**4. Bối cảnh & Cạm bẫy:**
+(Thường đi sau sự kiện nào? Chú ý gì để không bị bẫy?)"""
+
+        if st.button("🔥 CHẠY LÒ PHẢN ỨNG TẠO FILE WIKI", type="primary", use_container_width=True):
+            with st.spinner("Đặc vụ đang dịch MP4 và viết sách Markdown... Sếp chờ khoảng 1-2 phút nhé..."):
                 try:
-                    # Lọc lấy những file đã chạy xong (ACTIVE)
-                    active_files = [f for f in cloud_files if f.state == "ACTIVE"]
-                    prompt_parts = active_files + [user_prompt]
+                    client = genai.Client(api_key=st.session_state.gemini_api_key)
+                    prompt_parts = st.session_state.uploaded_gemini_files + [master_prompt]
                     
                     response = client.models.generate_content(
                         model='gemini-1.5-pro',
                         contents=prompt_parts
                     )
-                    st.markdown("### 📜 Báo cáo từ Đặc vụ:")
-                    st.info(response.text)
+                    
+                    st.session_state.latest_wiki_content = response.text
+                    st.success("✅ Đã chưng cất thành công! Sếp hãy xem trước và tải về bên dưới.")
+                    
                 except Exception as e:
                     st.error(f"❌ Lỗi phản hồi: {e}")
+        
+        if 'latest_wiki_content' in st.session_state:
+            with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
+                st.markdown(st.session_state.latest_wiki_content)
+            
+            # Đặt tên file thân thiện
+            timestamp = time.strftime("%Y%m%d_%H%M")
+            default_filename = f"Roman_Lesson_{timestamp}.md"
+            
+            st.download_button(
+                label="📥 TẢI FILE NÀY VỀ MÁY (Dành cho Obsidian Vault)",
+                data=st.session_state.latest_wiki_content,
+                file_name=default_filename,
+                mime="text/markdown",
+                type="primary"
+            )
 
 # --- PHÒNG SỐ 2 & 3 ---
 with tab2:
