@@ -7,7 +7,28 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google import genai
+# ==========================================
+# 1. CÀI ĐẶT GIAO DIỆN TỔNG QUAN
+# ==========================================
+st.set_page_config(page_title="ROMAN-X | Agentic Quant", page_icon="🏛️", layout="wide")
+st.title("🏛️ ROMAN-X: HỘI ĐỒNG ĐẦU TƯ TỰ TRỊ")
+st.divider()
 
+# KHỞI TẠO BỘ NHỚ LÕI (Cho Gemini API Key)
+KEY_FILE = "roman_keys.json"
+if 'gemini_api_key' not in st.session_state:
+    st.session_state.gemini_api_key = ""
+if 'uploaded_gemini_files' not in st.session_state:
+    st.session_state.uploaded_gemini_files = []
+
+# ==========================================
+# 2. DÒNG NÀY CỰC QUAN TRỌNG: ĐẺ RA 3 CÁI TABS
+# ==========================================
+tab1, tab2, tab3 = st.tabs(["🧠 BỘ NÃO (Lò Luyện Đan)", "📐 X-RAY (Đọc Chart)", "🎯 THỰC CHIẾN (POE)"])
+
+# ==========================================
+# PHÒNG SỐ 1: LÒ LUYỆN ĐAN (CẮM VÀO TAB 1)
+# ==========================================
 # ... (Khai báo API Gemini như cũ) ...
 
 st.header("📚 2. Hút Di sản trực tiếp từ Google Drive")
