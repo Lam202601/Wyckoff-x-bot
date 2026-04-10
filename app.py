@@ -1,113 +1,82 @@
 import streamlit as st
-from google import genai  # <--- Khai báo theo chuẩn mới của Google
 import tempfile
 import time
 import os
-import json
+import io
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+from google import genai
 
-# ==========================================
-# 1. CÀI ĐẶT TỔNG QUAN
-# ==========================================
-st.set_page_config(page_title="ROMAN-X | Agentic Quant", page_icon="🏛️", layout="wide")
+# ... (Khai báo API Gemini như cũ) ...
 
-# ==========================================
-# 2. KHỞI TẠO BỘ NHỚ LÕI (KÉT SẮT JSON)
-# ==========================================
-KEY_FILE = "roman_keys.json"
+st.header("📚 2. Hút Di sản trực tiếp từ Google Drive")
 
-if 'gemini_api_key' not in st.session_state:
-    if os.path.exists(KEY_FILE):
+import json # Sếp nhớ phải có chữ import json ở đầu nhé, nếu chưa có thì sếp thêm vào
+
+# 1. Xác thực bằng Két sắt Streamlit
+try:
+    # Lấy chuỗi JSON từ Két Sắt và dịch nó ra
+    gcp_creds = json.loads(st.secrets["GCP_JSON"])
+    credentials = service_account.Credentials.from_service_account_info(
+        gcp_creds,
+        scopes=['https://www.googleapis.com/auth/drive.readonly']
+    )
+    drive_service = build('drive', 'v3', credentials=credentials)
+    st.success("✅ Đã kết nối thành công với đường ống Google Drive!")
+except Exception as e:
+    st.error("❌ Chưa kết nối được Google Drive. Vui lòng kiểm tra tab Secrets.")
+
+# 2. Giao diện nạp link Google Drive
+drive_url = st.text_input("🔗 Dán Link chia sẻ của file MP4/PDF trên Google Drive vào đây:")
+
+if drive_url and st.button("🚀 HÚT VÀ NUỐT FILE NÀY", use_container_width=True):
+    # Trích xuất File ID từ Link
+    try:
+        file_id = drive_url.split('/d/')[1].split('/')[0]
+    except:
+        st.error("Link không hợp lệ. Vui lòng dùng link dạng 'https://drive.google.com/file/d/...'")
+        st.stop()
+
+    with st.status("Đang thực hiện chiến dịch hút dữ liệu...", expanded=True) as status:
         try:
-            with open(KEY_FILE, "r") as f:
-                st.session_state.gemini_api_key = json.load(f).get("GEMINI_API_KEY", "")
-        except:
-            st.session_state.gemini_api_key = ""
-    else:
-        st.session_state.gemini_api_key = ""
+            # Lấy tên file
+            file_metadata = drive_service.files().get(fileId=file_id, fields='name').execute()
+            file_name = file_metadata.get('name', 'Roman_Video.mp4')
+            st.write(f"📁 Đã tìm thấy file: {file_name}")
 
-if 'uploaded_gemini_files' not in st.session_state:
-    st.session_state.uploaded_gemini_files = []
+            # Khởi tạo file tạm trên ổ cứng (Không dùng RAM)
+            st.write("⏳ Đang truyền dữ liệu từ Drive qua ống ngầm (Bảo vệ RAM)...")
+            request = drive_service.files().get_media(fileId=file_id)
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_name.split('.')[-1]}") as tmp:
+                downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20) # Hút từng cục 20MB
+                done = False
+                while done is False:
+                    status, done = downloader.next_chunk()
+                    st.write(f"   ... Đã hút được {int(status.progress() * 100)}%")
+                tmp_path = tmp.name
 
-# ==========================================
-# 3. GIAO DIỆN ĐIỀU HÀNH
-# ==========================================
-st.title("🏛️ ROMAN-X: HỘI ĐỒNG ĐẦU TƯ TỰ TRỊ")
-st.markdown("*Bộ não AI nạp trực tiếp hàng loạt Video/PDF bài giảng thực chiến của Roman Bogomazov*")
-st.divider()
-
-tab1, tab2, tab3 = st.tabs(["🧠 BỘ NÃO (Lò Luyện Đan)", "📐 X-RAY (Đọc Chart)", "🎯 THỰC CHIẾN (POE)"])
-
-# ==========================================
-# PHÒNG SỐ 1: LÒ LUYỆN ĐAN (CỐI XAY WIKI)
-# ==========================================
-with tab1:
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.header("🔑 1. Đánh thức Đặc vụ")
-        api_input = st.text_input("Nhập Gemini API Key:", type="password", value=st.session_state.gemini_api_key)
-        
-        if st.button("Lưu Chìa Khóa Vĩnh Viễn"):
-            st.session_state.gemini_api_key = api_input
-            with open(KEY_FILE, "w") as f:
-                json.dump({"GEMINI_API_KEY": api_input}, f)
-            st.success("✅ Đã đúc chìa khóa vào Két sắt!")
-            st.rerun()
-
-        if len(st.session_state.uploaded_gemini_files) > 0:
-            if st.button("🗑️ Xóa sạch bộ nhớ tạm (Xóa MP4 trên mây)"):
-                st.session_state.uploaded_gemini_files = []
-                if 'latest_wiki_content' in st.session_state:
-                    del st.session_state['latest_wiki_content']
-                st.rerun()
-                
-        st.info("💡 Quy trình: Nạp File -> AI Tiêu hóa -> Bấm tải file Text (.md) về ném vào thư mục Obsidian trên máy sếp.")
-
-    with col2:
-        st.header("📚 2. Nạp Di sản của Roman")
-        if not st.session_state.gemini_api_key:
-            st.warning("⚠️ Vui lòng nhập API Key bên trái để mở khóa.")
-        else:
+            # Đẩy sang Gemini
+            st.write("☁️ Đang nạp vào não Google Gemini (Có thể mất vài phút cho Video)...")
             client = genai.Client(api_key=st.session_state.gemini_api_key)
+            gemini_file = client.files.upload(file=tmp_path)
             
-            uploaded_files = st.file_uploader(
-                "Kéo thả Video MP4 hoặc sách PDF, hoặc file hình ảnh vào đây", 
-                type=['mp4', 'pdf', 'txt','png','jpg', 'jpeg','pptx'], 
-                accept_multiple_files=True
-            )
+            while gemini_file.state == "PROCESSING":
+                time.sleep(5)
+                gemini_file = client.files.get(name=gemini_file.name)
             
-            if uploaded_files:
-                if st.button(f"🚀 BẮT ĐẦU NUỐT {len(uploaded_files)} TÀI LIỆU", use_container_width=True):
-                    for uploaded_file in uploaded_files:
-                        # DÙNG BẢNG STATUS ĐỂ THEO DÕI TIẾN ĐỘ THAY VÌ SPINNER QUAY VÔ HỒN
-                        with st.status(f"Đang xử lý: {uploaded_file.name}...", expanded=True) as status:
-                            try:
-                                st.write("⏳ 1. Đang lưu file tạm thời...")
-                                with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
-                                    tmp.write(uploaded_file.getbuffer()) 
-                                    tmp_path = tmp.name
-                                
-                                st.write("☁️ 2. Đang đẩy dữ liệu lên máy chủ Google...")
-                                gemini_file = client.files.upload(file=tmp_path)
-                                
-                                st.write("🧠 3. Google Gemini đang 'xem' video (Có thể mất 2-10 phút tùy độ dài)...")
-                                # Đếm ngược thời gian để sếp biết máy không treo
-                                wait_time = 0
-                                while gemini_file.state == "PROCESSING":
-                                    time.sleep(5)
-                                    wait_time += 5
-                                    st.write(f"   ... đã phân tích được {wait_time} giây...")
-                                    gemini_file = client.files.get(name=gemini_file.name)
-                                    
-                                if gemini_file.state == "FAILED":
-                                    status.update(label=f"❌ Lỗi: Google không thể đọc file này!", state="error", expanded=True)
-                                else:
-                                    st.session_state.uploaded_gemini_files.append(gemini_file)
-                                    status.update(label=f"✅ Nuốt thành công: {gemini_file.name}", state="complete", expanded=False)
-                                
-                                os.remove(tmp_path)
-                            except Exception as e:
-                                status.update(label=f"❌ Lỗi hệ thống: {e}", state="error", expanded=True)
+            if gemini_file.state == "FAILED":
+                st.error("❌ Gemini không đọc được file này!")
+            else:
+                st.session_state.uploaded_gemini_files.append(gemini_file)
+                st.success(f"✅ Nuốt thành công: {file_name}")
+            
+            # Xóa rác
+            os.remove(tmp_path)
+            
+        except Exception as e:
+            st.error(f"❌ Lỗi đường ống: {e}")
 
     st.divider()
     
