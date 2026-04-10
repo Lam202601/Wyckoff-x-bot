@@ -102,58 +102,32 @@ with tab1:
     if len(st.session_state.uploaded_gemini_files) > 0:
         st.subheader("🕵️ Chưng Cất Tri Thức (Ép Xung AI)")
         
-        master_prompt = """Mày là Đặc vụ Wyckoff Quant. Hãy xem kỹ các video/tài liệu tao vừa nạp, đặc biệt LẮNG NGHE kỹ lời thầy Roman Bogomazov giảng giải và đối chiếu với biểu đồ.
-Hãy chưng cất bài giảng này thành 1 file Wiki Markdown siêu chi tiết. BẮT BUỘC dùng Tiếng Việt và xuất theo đúng cấu trúc sau:
+        master_prompt = """You are an elite Wyckoff Quant Agent. Analyze the provided materials (videos, images, PDFs) from Roman Bogomazov's lectures. 
+Distill this knowledge into a highly detailed, purely quantitative Wiki Markdown file.
 
-# [Tên Chủ Đề Bài Học Ngắn Gọn]
+CRITICAL RULES:
+1. Write the ENTIRE output in 100% ENGLISH. Do not translate anything.
+2. Strictly preserve Roman Bogomazov's exact terminology.
+3. Focus heavily on quantitative logic (rules that can be coded into trading algorithms).
+
+Output using exactly this Markdown structure:
+
+# [Short Topic Name]
 **Metadata:**
-- **Tags:** #Wyckoff_Theory, #Roman_Bogomazov
-- **Links:** (Gắn link tới các khái niệm khác bằng cú pháp [[Tên Khái Niệm]], ví dụ: [[Pha C]], [[Spring]], [[VSA]])
+- **Tags:** #Wyckoff_Theory, #[Relevant_Keywords]
+- **Links:** (Link to other core concepts using double brackets, e.g., [[Phase C]], [[Spring]], [[Change of Character]], [[Composite Operator]])
 
-**1. Tâm pháp gốc (Roman's Insight):**
-(Trích xuất những câu nói, lời dặn dò quan trọng nhất của thầy Roman bằng lời).
+**1. Roman's Insight:**
+(Extract the most critical spoken advice, core philosophy, or specific nuances Roman emphasizes about this topic).
 
-**2. Dấu hiệu Hành vi (Price/Volume):**
-(Cụ thể giá và khối lượng di chuyển thế nào?)
+**2. Price/Volume Behavior:**
+(Specific details on price spread, closing position, and volume signatures).
 
-**3. Ánh xạ Định lượng (Quant Logic):**
-(Nếu phải viết code để tìm dấu hiệu này trên biểu đồ, điều kiện toán học là gì?)
+**3. Quant Logic:**
+(If writing an algorithmic trading script to detect this event, what are the exact mathematical or logical conditions? E.g., Volume < 20-period SMA, Spread < ATR, Close within the lower third of the bar, etc.).
 
-**4. Bối cảnh & Cạm bẫy:**
-(Thường đi sau sự kiện nào? Chú ý gì để không bị bẫy?)"""
-
-        if st.button("🔥 CHẠY LÒ PHẢN ỨNG TẠO FILE WIKI", type="primary", use_container_width=True):
-            with st.spinner("Đặc vụ đang dịch MP4 và viết sách Markdown... Sếp chờ khoảng 1-2 phút nhé..."):
-                try:
-                    client = genai.Client(api_key=st.session_state.gemini_api_key)
-                    prompt_parts = st.session_state.uploaded_gemini_files + [master_prompt]
-                    
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=prompt_parts
-                    )
-                    
-                    st.session_state.latest_wiki_content = response.text
-                    st.success("✅ Đã chưng cất thành công! Sếp hãy xem trước và tải về bên dưới.")
-                    
-                except Exception as e:
-                    st.error(f"❌ Lỗi phản hồi: {e}")
-        
-        if 'latest_wiki_content' in st.session_state:
-            with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
-                st.markdown(st.session_state.latest_wiki_content)
-            
-            # Đặt tên file thân thiện
-            timestamp = time.strftime("%Y%m%d_%H%M")
-            default_filename = f"Roman_Lesson_{timestamp}.md"
-            
-            st.download_button(
-                label="📥 TẢI FILE NÀY VỀ MÁY (Dành cho Obsidian Vault)",
-                data=st.session_state.latest_wiki_content,
-                file_name=default_filename,
-                mime="text/markdown",
-                type="primary"
-            )
+**4. Context & Traps:**
+(Where does this event fit within the overall Accumulation/Distribution schematic? What are the common traps Smart Money uses here?)"""
 
 # --- PHÒNG SỐ 2 & 3 ---
 with tab2:
