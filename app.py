@@ -1,4 +1,5 @@
 import streamlit as st
+import json
 import tempfile
 import time
 import os
@@ -7,6 +8,7 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from google import genai
+
 # ==========================================
 # 1. CÀI ĐẶT GIAO DIỆN TỔNG QUAN
 # ==========================================
@@ -14,7 +16,7 @@ st.set_page_config(page_title="ROMAN-X | Agentic Quant", page_icon="🏛️", la
 st.title("🏛️ ROMAN-X: HỘI ĐỒNG ĐẦU TƯ TỰ TRỊ")
 st.divider()
 
-# KHỞI TẠO BỘ NHỚ LÕI (Cho Gemini API Key)
+# KHỞI TẠO BỘ NHỚ LÕI
 KEY_FILE = "roman_keys.json"
 if 'gemini_api_key' not in st.session_state:
     st.session_state.gemini_api_key = ""
@@ -22,87 +24,109 @@ if 'uploaded_gemini_files' not in st.session_state:
     st.session_state.uploaded_gemini_files = []
 
 # ==========================================
-# 2. DÒNG NÀY CỰC QUAN TRỌNG: ĐẺ RA 3 CÁI TABS
+# 2. KHUNG SƯỜN: 3 TABS CHIẾN LƯỢC
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["🧠 BỘ NÃO (Lò Luyện Đan)", "📐 X-RAY (Đọc Chart)", "🎯 THỰC CHIẾN (POE)"])
 
 # ==========================================
-# PHÒNG SỐ 1: LÒ LUYỆN ĐAN (CẮM VÀO TAB 1)
+# PHÒNG SỐ 1: LÒ LUYỆN ĐAN
 # ==========================================
-# ... (Khai báo API Gemini như cũ) ...
+with tab1:
+    col1, col2 = st.columns([1, 2])
+    
+    # --- CỘT TRÁI: NHẬP CHÌA KHÓA API ---
+    with col1:
+        st.header("🔑 1. Đánh thức Đặc vụ")
+        api_input = st.text_input("Nhập Gemini API Key (Bắt buộc):", type="password", value=st.session_state.gemini_api_key)
+        
+        if st.button("Lưu Chìa Khóa AI"):
+            st.session_state.gemini_api_key = api_input
+            st.success("✅ Đã ghi nhớ API Key!")
+            st.rerun()
 
-st.header("📚 2. Hút Di sản trực tiếp từ Google Drive")
-
-import json # Sếp nhớ phải có chữ import json ở đầu nhé, nếu chưa có thì sếp thêm vào
-
-# 1. Xác thực bằng Két sắt Streamlit
-try:
-    # Lấy chuỗi JSON từ Két Sắt và dịch nó ra
-    gcp_creds = json.loads(st.secrets["GCP_JSON"])
-    credentials = service_account.Credentials.from_service_account_info(
-        gcp_creds,
-        scopes=['https://www.googleapis.com/auth/drive.readonly']
-    )
-    drive_service = build('drive', 'v3', credentials=credentials)
-    st.success("✅ Đã kết nối thành công với đường ống Google Drive!")
-except Exception as e:
-    st.error("❌ Chưa kết nối được Google Drive. Vui lòng kiểm tra tab Secrets.")
-
-# 2. Giao diện nạp link Google Drive
-drive_url = st.text_input("🔗 Dán Link chia sẻ của file MP4/PDF trên Google Drive vào đây:")
-
-if drive_url and st.button("🚀 HÚT VÀ NUỐT FILE NÀY", use_container_width=True):
-    # Trích xuất File ID từ Link
-    try:
-        file_id = drive_url.split('/d/')[1].split('/')[0]
-    except:
-        st.error("Link không hợp lệ. Vui lòng dùng link dạng 'https://drive.google.com/file/d/...'")
-        st.stop()
-
-    with st.status("Đang thực hiện chiến dịch hút dữ liệu...", expanded=True) as status:
+        if len(st.session_state.uploaded_gemini_files) > 0:
+            st.info(f"Đang có {len(st.session_state.uploaded_gemini_files)} file trong não AI.")
+            if st.button("🗑️ Xóa sạch bộ nhớ tạm"):
+                st.session_state.uploaded_gemini_files = []
+                if 'latest_wiki_content' in st.session_state:
+                    del st.session_state['latest_wiki_content']
+                st.rerun()
+                
+    # --- CỘT PHẢI: HÚT DATA TỪ GOOGLE DRIVE ---
+    with col2:
+        st.header("📚 2. Hút Di sản từ Google Drive")
+        
+        # Kiểm tra Két Sắt Drive
+        drive_service = None
         try:
-            # Lấy tên file
-            file_metadata = drive_service.files().get(fileId=file_id, fields='name').execute()
-            file_name = file_metadata.get('name', 'Roman_Video.mp4')
-            st.write(f"📁 Đã tìm thấy file: {file_name}")
-
-            # Khởi tạo file tạm trên ổ cứng (Không dùng RAM)
-            st.write("⏳ Đang truyền dữ liệu từ Drive qua ống ngầm (Bảo vệ RAM)...")
-            request = drive_service.files().get_media(fileId=file_id)
-            
-            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_name.split('.')[-1]}") as tmp:
-                downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20) # Hút từng cục 20MB
-                done = False
-                while done is False:
-                    status, done = downloader.next_chunk()
-                    st.write(f"   ... Đã hút được {int(status.progress() * 100)}%")
-                tmp_path = tmp.name
-
-            # Đẩy sang Gemini
-            st.write("☁️ Đang nạp vào não Google Gemini (Có thể mất vài phút cho Video)...")
-            client = genai.Client(api_key=st.session_state.gemini_api_key)
-            gemini_file = client.files.upload(file=tmp_path)
-            
-            while gemini_file.state == "PROCESSING":
-                time.sleep(5)
-                gemini_file = client.files.get(name=gemini_file.name)
-            
-            if gemini_file.state == "FAILED":
-                st.error("❌ Gemini không đọc được file này!")
+            if "GCP_JSON" in st.secrets:
+                gcp_creds = json.loads(st.secrets["GCP_JSON"])
+                credentials = service_account.Credentials.from_service_account_info(
+                    gcp_creds,
+                    scopes=['https://www.googleapis.com/auth/drive.readonly']
+                )
+                drive_service = build('drive', 'v3', credentials=credentials)
+                st.success("✅ Đã kết nối thành công với đường ống ngầm Google Drive!")
             else:
-                st.session_state.uploaded_gemini_files.append(gemini_file)
-                st.success(f"✅ Nuốt thành công: {file_name}")
-            
-            # Xóa rác
-            os.remove(tmp_path)
-            
+                st.warning("⚠️ Két sắt trống. Vui lòng thêm GCP_JSON vào tab Secrets của Streamlit Cloud.")
         except Exception as e:
-            st.error(f"❌ Lỗi đường ống: {e}")
+            st.error(f"❌ Kết nối Drive thất bại. Vui lòng kiểm tra lại cấu trúc JSON trong Secrets. Lỗi: {e}")
+
+        # Chỉ cho phép hút nếu có API Key và Drive đã kết nối
+        if not st.session_state.gemini_api_key:
+            st.error("⚠️ Sếp phải nhập Gemini API Key ở bên trái trước.")
+        elif drive_service is not None:
+            drive_url = st.text_input("🔗 Dán Link chia sẻ của file MP4/PDF trên Google Drive vào đây:")
+            
+            if drive_url and st.button("🚀 HÚT VÀ NUỐT FILE NÀY", use_container_width=True):
+                try:
+                    file_id = drive_url.split('/d/')[1].split('/')[0]
+                except:
+                    st.error("Link không hợp lệ. Vui lòng copy đúng link Share từ Google Drive.")
+                    st.stop()
+
+                with st.status("Đang thực hiện chiến dịch hút dữ liệu...", expanded=True) as status:
+                    try:
+                        file_metadata = drive_service.files().get(fileId=file_id, fields='name').execute()
+                        file_name = file_metadata.get('name', 'Roman_Document')
+                        st.write(f"📁 Đã tìm thấy file: {file_name}")
+
+                        st.write("⏳ Đang hút dữ liệu về (Bảo vệ RAM)...")
+                        request = drive_service.files().get_media(fileId=file_id)
+                        
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_name.split('.')[-1]}") as tmp:
+                            downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20)
+                            done = False
+                            while done is False:
+                                d_status, done = downloader.next_chunk()
+                                st.write(f"   ... Đã hút được {int(d_status.progress() * 100)}%")
+                            tmp_path = tmp.name
+
+                        st.write("☁️ Đang nạp vào não Google Gemini...")
+                        client = genai.Client(api_key=st.session_state.gemini_api_key)
+                        gemini_file = client.files.upload(file=tmp_path)
+                        
+                        st.write("🧠 Gemini đang nhai dữ liệu (Chờ vài phút nếu là Video)...")
+                        while gemini_file.state == "PROCESSING":
+                            time.sleep(5)
+                            gemini_file = client.files.get(name=gemini_file.name)
+                        
+                        if gemini_file.state == "FAILED":
+                            status.update(label="❌ Lỗi: Gemini từ chối file này!", state="error", expanded=True)
+                        else:
+                            st.session_state.uploaded_gemini_files.append(gemini_file)
+                            status.update(label=f"✅ Nuốt thành công: {file_name}", state="complete", expanded=False)
+                        
+                        os.remove(tmp_path)
+                        
+                    except Exception as e:
+                        status.update(label=f"❌ Lỗi đường ống: {e}", state="error", expanded=True)
 
     st.divider()
     
+    # --- KHÚC DƯỚI: LÒ PHẢN ỨNG VÀ NÚT TẢI XUỐNG ---
     if len(st.session_state.uploaded_gemini_files) > 0:
-        st.subheader("🕵️ Chưng Cất Tri Thức (Ép Xung AI)")
+        st.subheader("🕵️ 3. Chưng Cất Tri Thức (Ép Xung AI)")
         
         master_prompt = """You are an elite Wyckoff Quant Agent. Analyze the provided materials (videos, images, PDFs) from Roman Bogomazov's lectures. 
 Distill this knowledge into a highly detailed, purely quantitative Wiki Markdown file.
@@ -131,7 +155,42 @@ Output using exactly this Markdown structure:
 **4. Context & Traps:**
 (Where does this event fit within the overall Accumulation/Distribution schematic? What are the common traps Smart Money uses here?)"""
 
-# --- PHÒNG SỐ 2 & 3 ---
+        if st.button("🔥 CHẠY LÒ PHẢN ỨNG TẠO FILE WIKI", type="primary", use_container_width=True):
+            with st.spinner("Đặc vụ đang chưng cất thành Wiki. Sếp chờ chút nhé..."):
+                try:
+                    client = genai.Client(api_key=st.session_state.gemini_api_key)
+                    prompt_parts = st.session_state.uploaded_gemini_files + [master_prompt]
+                    
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt_parts
+                    )
+                    
+                    st.session_state.latest_wiki_content = response.text
+                    st.success("✅ Đã chưng cất thành công! Sếp xem trước và tải về bên dưới.")
+                    
+                except Exception as e:
+                    st.error(f"❌ Lỗi AI: {e}")
+        
+        # HIỂN THỊ KẾT QUẢ VÀ NÚT TẢI XUỐNG
+        if 'latest_wiki_content' in st.session_state:
+            with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
+                st.markdown(st.session_state.latest_wiki_content)
+            
+            timestamp = time.strftime("%Y%m%d_%H%M")
+            default_filename = f"Roman_Lesson_EN_{timestamp}.md"
+            
+            st.download_button(
+                label="📥 TẢI FILE WIKI NÀY VỀ MÁY M4",
+                data=st.session_state.latest_wiki_content,
+                file_name=default_filename,
+                mime="text/markdown",
+                type="primary"
+            )
+
+# ==========================================
+# PHÒNG SỐ 2 & 3: GIỮ NGUYÊN CHỜ NÂNG CẤP
+# ==========================================
 with tab2:
     st.header("Đôi Mắt X-Ray: Giải mã cấu trúc giá")
     st.info("Trạng thái: Chờ ráp thuật toán PineScript lượng hóa độ dốc (ATR).")
