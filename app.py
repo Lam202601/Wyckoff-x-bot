@@ -53,18 +53,15 @@ with tab1:
                 st.rerun()
                 
     # --- CỘT PHẢI: HÚT DATA TỪ GOOGLE DRIVE ---
-    # --- CỘT PHẢI: HÚT DATA TỪ GOOGLE DRIVE ---
     with col2:
         st.header("📚 2. Hút Di sản từ Google Drive")
         
-        # GIAO DIỆN MỚI: NẠP THẲNG FILE JSON VÀO ĐÂY, KHÔNG DÙNG SECRETS NỮA
         st.info("Bảo mật: File JSON chỉ lưu trên RAM tạm thời, dùng xong tự hủy.")
         uploaded_json = st.file_uploader("Tải file Chìa khóa Google (.json) lên đây:", type=["json"])
         
         drive_service = None
         if uploaded_json is not None:
             try:
-                # Trực tiếp đọc file gốc, chấp mọi loại ký tự tàng hình
                 gcp_creds = json.load(uploaded_json)
                 credentials = service_account.Credentials.from_service_account_info(
                     gcp_creds,
@@ -75,55 +72,81 @@ with tab1:
             except Exception as e:
                 st.error(f"❌ Lỗi đọc file JSON: {e}")
 
-        # Chỉ cho phép hút nếu có API Key và Drive đã kết nối
         if not st.session_state.gemini_api_key:
             st.error("⚠️ Sếp phải nhập Gemini API Key ở bên trái trước.")
         elif drive_service is not None:
-            drive_url = st.text_input("🔗 Dán Link chia sẻ của file MP4/PDF trên Google Drive vào đây:")
+            drive_url = st.text_input("🔗 Dán Link THƯ MỤC (Folder) hoặc FILE trên Drive vào đây:")
             
-            if drive_url and st.button("🚀 HÚT VÀ NUỐT FILE NÀY", use_container_width=True):
+            if drive_url and st.button("🚀 HÚT TRỌN Ổ DỮ LIỆU", use_container_width=True):
+                files_to_process = []
+                
+                # PHÂN LOẠI LINK: THƯ MỤC hay FILE LẺ?
                 try:
-                    file_id = drive_url.split('/d/')[1].split('/')[0]
-                except:
-                    st.error("Link không hợp lệ. Vui lòng copy đúng link Share từ Google Drive.")
+                    if '/folders/' in drive_url:
+                        folder_id = drive_url.split('/folders/')[1].split('?')[0]
+                        results = drive_service.files().list(
+                            q=f"'{folder_id}' in parents and trashed=false", 
+                            fields="files(id, name)"
+                        ).execute()
+                        files_to_process = results.get('files', [])
+                        if not files_to_process:
+                            st.warning("Thư mục này trống hoặc sếp chưa Share quyền cho Đặc vụ!")
+                            st.stop()
+                    elif '/file/d/' in drive_url:
+                        file_id = drive_url.split('/d/')[1].split('/')[0]
+                        file_meta = drive_service.files().get(fileId=file_id, fields='name').execute()
+                        files_to_process = [{'id': file_id, 'name': file_meta.get('name')}]
+                    else:
+                        st.error("Link không đúng chuẩn Google Drive.")
+                        st.stop()
+                except Exception as e:
+                    st.error(f"❌ Lỗi đọc link: {e}. Sếp nhớ Share quyền cho email Đặc vụ nhé!")
                     st.stop()
 
-                with st.status("Đang thực hiện chiến dịch hút dữ liệu...", expanded=True) as status:
-                    try:
-                        file_metadata = drive_service.files().get(fileId=file_id, fields='name').execute()
-                        file_name = file_metadata.get('name', 'Roman_Document')
-                        st.write(f"📁 Đã tìm thấy file: {file_name}")
+                # VÒNG LẶP HÚT TỰ ĐỘNG TOÀN BỘ FILE TRONG THƯ MỤC
+                st.write(f"🎯 Đặc vụ đã khóa mục tiêu: {len(files_to_process)} tài liệu.")
+                
+                for i, file_item in enumerate(files_to_process):
+                    file_id = file_item['id']
+                    file_name = file_item['name']
+                    
+                    with st.status(f"[{i+1}/{len(files_to_process)}] Đang xử lý: {file_name}...", expanded=True) as status:
+                        try:
+                            request = drive_service.files().get_media(fileId=file_id)
+                            
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_name.split('.')[-1]}") as tmp:
+                                downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20)
+                                done = False
+                                while done is False:
+                                    d_status, done = downloader.next_chunk()
+                                    st.write(f"   ... Đang hút từ Drive: {int(d_status.progress() * 100)}%")
+                                tmp_path = tmp.name
 
-                        st.write("⏳ Đang hút dữ liệu về (Bảo vệ RAM)...")
-                        request = drive_service.files().get_media(fileId=file_id)
-                        
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_name.split('.')[-1]}") as tmp:
-                            downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20)
-                            done = False
-                            while done is False:
-                                d_status, done = downloader.next_chunk()
-                                st.write(f"   ... Đã hút được {int(d_status.progress() * 100)}%")
-                            tmp_path = tmp.name
-
-                        st.write("☁️ Đang nạp vào não Google Gemini...")
-                        client = genai.Client(api_key=st.session_state.gemini_api_key)
-                        gemini_file = client.files.upload(file=tmp_path)
-                        
-                        st.write("🧠 Gemini đang nhai dữ liệu (Chờ vài phút nếu là Video)...")
-                        while gemini_file.state == "PROCESSING":
-                            time.sleep(5)
-                            gemini_file = client.files.get(name=gemini_file.name)
-                        
-                        if gemini_file.state == "FAILED":
-                            status.update(label="❌ Lỗi: Gemini từ chối file này!", state="error", expanded=True)
-                        else:
-                            st.session_state.uploaded_gemini_files.append(gemini_file)
-                            status.update(label=f"✅ Nuốt thành công: {file_name}", state="complete", expanded=False)
-                        
-                        os.remove(tmp_path)
-                        
-                    except Exception as e:
-                        status.update(label=f"❌ Lỗi đường ống: {e}", state="error", expanded=True)
+                            st.write("☁️ Đang nhồi vào não AI Gemini...")
+                            client = genai.Client(api_key=st.session_state.gemini_api_key)
+                            gemini_file = client.files.upload(file=tmp_path)
+                            
+                            while gemini_file.state == "PROCESSING":
+                                time.sleep(5)
+                                gemini_file = client.files.get(name=gemini_file.name)
+                            
+                            if gemini_file.state == "FAILED":
+                                status.update(label=f"❌ Lỗi: Gemini từ chối file {file_name}", state="error")
+                            else:
+                                st.session_state.uploaded_gemini_files.append(gemini_file)
+                                status.update(label=f"✅ Nuốt thành công: {file_name}", state="complete", expanded=False)
+                            
+                            os.remove(tmp_path)
+                            
+                            # CƠ CHẾ NÉ TRẠM THU PHÍ (Làm mát API)
+                            if i < len(files_to_process) - 1:
+                                st.info("⏱️ Máy đang nghỉ 15 giây để né cảnh báo quá tải (429) của Google...")
+                                time.sleep(15)
+                                
+                        except Exception as e:
+                            status.update(label=f"❌ Thất bại với file này: {e}", state="error")
+                
+                st.success("🎉 TỔNG TIẾN CÔNG THÀNH CÔNG! Đã nuốt trọn ổ dữ liệu!")
 
     st.divider()
     
