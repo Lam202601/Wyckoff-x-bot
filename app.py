@@ -65,75 +65,92 @@ with tab1:
             st.rerun()
 
         if len(st.session_state.uploaded_gemini_files) > 0:
-            st.info(f"Đã nạp {len(st.session_state.uploaded_gemini_files)} tài liệu.")
-            if st.button("🗑️ Xóa bộ nhớ"):
-                st.session_state.uploaded_gemini_files = []
-                st.rerun()
-                
-    with col2:
-        st.header("📚 2. Hút Di sản (Càn quét thư mục)")
-        uploaded_json = st.file_uploader("Ném file JSON Google Cloud vào đây:", type=["json"])
+        st.subheader("🕵️ 3. Chưng Cất Tri Thức (Ép Xung AI)")
         
-        drive_service = None
-        if uploaded_json:
-            try:
-                gcp_creds = json.load(uploaded_json)
-                credentials = service_account.Credentials.from_service_account_info(
-                    gcp_creds, scopes=['https://www.googleapis.com/auth/drive.readonly']
-                )
-                drive_service = build('drive', 'v3', credentials=credentials)
-                st.success("✅ Hệ thống quét đệ quy đã sẵn sàng!")
-            except Exception as e: st.error(f"Lỗi JSON: {e}")
+        master_prompt = """You are an elite Wyckoff Quant Agent. Analyze the provided materials (videos, images, PDFs) from Roman Bogomazov's lectures. 
+Distill this knowledge into a highly detailed, purely quantitative Wiki Markdown file.
 
-        if drive_service and st.session_state.gemini_api_key:
-            drive_url = st.text_input("🔗 Link Thư mục lớn (Chứa nhiều sub-folders):")
+CRITICAL RULES:
+1. Write the ENTIRE output in 100% ENGLISH. Do not translate anything.
+2. Strictly preserve Roman Bogomazov's exact terminology.
+3. Focus heavily on quantitative logic (rules that can be coded into trading algorithms).
+
+Output using exactly this Markdown structure:
+
+# [Short Topic Name]
+**Metadata:**
+- **Tags:** #Wyckoff_Theory, #[Relevant_Keywords]
+- **Links:** (Link to other core concepts using double brackets, e.g., [[Phase C]], [[Spring]], [[Change of Character]], [[Composite Operator]])
+
+**1. Roman's Insight:**
+(Extract the most critical spoken advice, core philosophy, or specific nuances Roman emphasizes about this topic).
+
+**2. Price/Volume Behavior:**
+(Specific details on price spread, closing position, and volume signatures).
+
+**3. Quant Logic:**
+(If writing an algorithmic trading script to detect this event, what are the exact mathematical or logical conditions? E.g., Volume < 20-period SMA, Spread < ATR, Close within the lower third of the bar, etc.).
+
+**4. Context & Traps:**
+(Where does this event fit within the overall Accumulation/Distribution schematic? What are the common traps Smart Money uses here?)"""
+
+        if st.button("🔥 CHẠY DÂY CHUYỀN TẠO WIKI TỰ ĐỘNG", type="primary", use_container_width=True):
+            st.session_state.latest_wiki_content = "# TỔNG HỢP WIKI WYCKOFF (ROMAN)\n\n"
+            total_files = len(st.session_state.uploaded_gemini_files)
             
-            if drive_url and st.button("🚀 TỔNG TIẾN CÔNG HÚT SẠCH", use_container_width=True):
+            # Thanh tiến độ xịn xò để sếp không phải ngóng
+            progress_bar = st.progress(0, text="Chuẩn bị khởi động lò phản ứng...")
+            status_text = st.empty()
+            
+            client = genai.Client(api_key=st.session_state.gemini_api_key)
+            
+            for i, gemini_file in enumerate(st.session_state.uploaded_gemini_files):
+                # Cập nhật trạng thái cho sếp biết
+                progress_bar.progress((i) / total_files, text=f"Đang chưng cất bài học {i+1}/{total_files}...")
+                status_text.info(f"⏳ Đang phân tích: Tài liệu số {i+1}. Chờ chút nhé sếp...")
+                
                 try:
-                    folder_id = drive_url.split('/folders/')[1].split('?')[0] if '/folders/' in drive_url else drive_url.split('/d/')[1].split('/')[0]
+                    # Truyền TỪNG FILE MỘT + master prompt vào AI
+                    prompt_parts = [gemini_file, master_prompt]
                     
-                    with st.status("🔍 Đang càn quét các thư mục con...", expanded=True) as status:
-                        files_to_process = get_all_files_recursive(drive_service, folder_id)
-                        st.write(f"🎯 Tìm thấy tổng cộng {len(files_to_process)} file trong mọi ngóc ngách.")
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=prompt_parts
+                    )
+                    
+                    # Ghép bài mới vào cuốn Wiki tổng
+                    st.session_state.latest_wiki_content += f"\n\n---\n## TÀI LIỆU SỐ {i+1}\n\n"
+                    st.session_state.latest_wiki_content += response.text
+                    
+                    status_text.success(f"✅ Đã đúc kết xong Tài liệu số {i+1}!")
+                    
+                    # Làm mát AI 15 giây để không bị khóa mõm
+                    if i < total_files - 1:
+                        status_text.warning("⏱️ Đang làm mát lò AI 15 giây trước khi nhai bài tiếp theo...")
+                        time.sleep(15)
                         
-                        for i, file_item in enumerate(files_to_process):
-                            f_id, f_name, f_mime = file_item['id'], file_item['name'], file_item.get('mimeType', '')
-                            
-                            # Bỏ qua các file rác không đọc được
-                            if 'folder' in f_mime or 'shortcut' in f_mime: continue
-                            
-                            st.write(f"[{i+1}/{len(files_to_process)}] Đang nuốt: {f_name}")
-                            
-                            # Xử lý Ép PDF nếu là Google Docs/Sheets
-                            if 'vnd.google-apps' in f_mime and any(x in f_mime for x in ['document', 'spreadsheet', 'presentation']):
-                                request = drive_service.files().export_media(fileId=f_id, mimeType='application/pdf')
-                                suffix = ".pdf"
-                            else:
-                                request = drive_service.files().get_media(fileId=f_id)
-                                suffix = f".{f_name.split('.')[-1]}" if '.' in f_name else ".tmp"
-
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-                                downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*10)
-                                done = False
-                                while not done: status_dl, done = downloader.next_chunk()
-                                tmp_path = tmp.name
-
-                            client = genai.Client(api_key=st.session_state.gemini_api_key)
-                            gemini_file = client.files.upload(file=tmp_path)
-                            while gemini_file.state == "PROCESSING": time.sleep(5); gemini_file = client.files.get(name=gemini_file.name)
-                            
-                            st.session_state.uploaded_gemini_files.append(gemini_file)
-                            os.remove(tmp_path)
-                            if i < len(files_to_process)-1: time.sleep(15) # Né lỗi 429
-                        
-                        status.update(label="🎉 Đã nuốt trọn di sản từ mọi thư mục con!", state="complete")
-                except Exception as e: st.error(f"Lỗi: {e}")
-
-    st.divider()
-    if len(st.session_state.uploaded_gemini_files) > 0:
-        if st.button("🔥 TẠO WIKI TỔNG HỢP TỪ TẤT CẢ FILE", type="primary", use_container_width=True):
-            # ... (Phần logic Generate Content dùng master_prompt thuần Anh của sếp ở đây) ...
-            st.info("Đang xử lý Wiki chuẩn Wyckoff English...")
+                except Exception as e:
+                    status_text.error(f"❌ Đặc vụ bị vấp ở Tài liệu số {i+1}: {e}")
+            
+            # Cập nhật khi hoàn tất 100%
+            progress_bar.progress(100, text="✅ Dây chuyền hoàn tất!")
+            status_text.success("🎉 ĐÃ ĐÚC KẾT XONG TOÀN BỘ WIKI! Sếp xem trước và tải về bên dưới.")
+        
+        # KHÚC XUẤT FILE TẢI VỀ
+        if 'latest_wiki_content' in st.session_state:
+            with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
+                st.markdown(st.session_state.latest_wiki_content)
+            
+            timestamp = time.strftime("%Y%m%d_%H%M")
+            default_filename = f"Roman_Wyckoff_FullWiki_{timestamp}.md"
+            
+            st.download_button(
+                label="📥 TẢI FILE WIKI TỔNG HỢP NÀY VỀ MÁY",
+                data=st.session_state.latest_wiki_content,
+                file_name=default_filename,
+                mime="text/markdown",
+                type="primary"
+            )
 
 # ==========================================
 # PHÒNG SỐ 2 & 3: GIỮ NGUYÊN KHÔNG MẤT
