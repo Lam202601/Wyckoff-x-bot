@@ -79,23 +79,35 @@ with tab1:
             if uploaded_files:
                 if st.button(f"🚀 BẮT ĐẦU NUỐT {len(uploaded_files)} TÀI LIỆU", use_container_width=True):
                     for uploaded_file in uploaded_files:
-                        with st.spinner(f"Đang nhai file: {uploaded_file.name}..."):
+                        # DÙNG BẢNG STATUS ĐỂ THEO DÕI TIẾN ĐỘ THAY VÌ SPINNER QUAY VÔ HỒN
+                        with st.status(f"Đang xử lý: {uploaded_file.name}...", expanded=True) as status:
                             try:
+                                st.write("⏳ 1. Đang lưu file tạm thời...")
                                 with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_file.name.split('.')[-1]}") as tmp:
                                     tmp.write(uploaded_file.getbuffer()) 
                                     tmp_path = tmp.name
                                 
+                                st.write("☁️ 2. Đang đẩy dữ liệu lên máy chủ Google...")
                                 gemini_file = client.files.upload(file=tmp_path)
                                 
+                                st.write("🧠 3. Google Gemini đang 'xem' video (Có thể mất 2-10 phút tùy độ dài)...")
+                                # Đếm ngược thời gian để sếp biết máy không treo
+                                wait_time = 0
                                 while gemini_file.state == "PROCESSING":
                                     time.sleep(5)
+                                    wait_time += 5
+                                    st.write(f"   ... đã phân tích được {wait_time} giây...")
                                     gemini_file = client.files.get(name=gemini_file.name)
                                     
-                                st.session_state.uploaded_gemini_files.append(gemini_file)
-                                st.success(f"✅ Đã nuốt xong: {gemini_file.name}")
+                                if gemini_file.state == "FAILED":
+                                    status.update(label=f"❌ Lỗi: Google không thể đọc file này!", state="error", expanded=True)
+                                else:
+                                    st.session_state.uploaded_gemini_files.append(gemini_file)
+                                    status.update(label=f"✅ Nuốt thành công: {gemini_file.name}", state="complete", expanded=False)
+                                
                                 os.remove(tmp_path)
                             except Exception as e:
-                                st.error(f"❌ Lỗi khi nuốt: {e}")
+                                status.update(label=f"❌ Lỗi hệ thống: {e}", state="error", expanded=True)
 
     st.divider()
     
