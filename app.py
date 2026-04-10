@@ -53,24 +53,27 @@ with tab1:
                 st.rerun()
                 
     # --- CỘT PHẢI: HÚT DATA TỪ GOOGLE DRIVE ---
+    # --- CỘT PHẢI: HÚT DATA TỪ GOOGLE DRIVE ---
     with col2:
         st.header("📚 2. Hút Di sản từ Google Drive")
         
-        # Kiểm tra Két Sắt Drive
+        # GIAO DIỆN MỚI: NẠP THẲNG FILE JSON VÀO ĐÂY, KHÔNG DÙNG SECRETS NỮA
+        st.info("Bảo mật: File JSON chỉ lưu trên RAM tạm thời, dùng xong tự hủy.")
+        uploaded_json = st.file_uploader("Tải file Chìa khóa Google (.json) lên đây:", type=["json"])
+        
         drive_service = None
-        try:
-            if "GCP_JSON" in st.secrets:
-                gcp_creds = json.loads(st.secrets["GCP_JSON"])
+        if uploaded_json is not None:
+            try:
+                # Trực tiếp đọc file gốc, chấp mọi loại ký tự tàng hình
+                gcp_creds = json.load(uploaded_json)
                 credentials = service_account.Credentials.from_service_account_info(
                     gcp_creds,
                     scopes=['https://www.googleapis.com/auth/drive.readonly']
                 )
                 drive_service = build('drive', 'v3', credentials=credentials)
-                st.success("✅ Đã kết nối thành công với đường ống ngầm Google Drive!")
-            else:
-                st.warning("⚠️ Két sắt trống. Vui lòng thêm GCP_JSON vào tab Secrets của Streamlit Cloud.")
-        except Exception as e:
-            st.error(f"❌ Kết nối Drive thất bại. Vui lòng kiểm tra lại cấu trúc JSON trong Secrets. Lỗi: {e}")
+                st.success("✅ Đã kết nối thành công với đường ống Google Drive!")
+            except Exception as e:
+                st.error(f"❌ Lỗi đọc file JSON: {e}")
 
         # Chỉ cho phép hút nếu có API Key và Drive đã kết nối
         if not st.session_state.gemini_api_key:
