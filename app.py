@@ -3,7 +3,6 @@ import json
 import tempfile
 import time
 import os
-import io
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
@@ -57,6 +56,7 @@ def get_all_files_recursive(service, folder_id):
 with tab1:
     col1, col2 = st.columns([1, 2])
     
+    # --- CỘT TRÁI: API KEY ---
     with col1:
         st.header("🔑 1. Đánh thức Đặc vụ")
         api_input = st.text_input("Gemini API Key:", type="password", value=st.session_state.gemini_api_key)
@@ -65,6 +65,121 @@ with tab1:
             st.rerun()
 
         if len(st.session_state.uploaded_gemini_files) > 0:
+            st.info(f"Đã nạp {len(st.session_state.uploaded_gemini_files)} tài liệu vào não AI.")
+            if st.button("🗑️ Xóa sạch bộ nhớ tạm"):
+                st.session_state.uploaded_gemini_files = []
+                if 'latest_wiki_content' in st.session_state:
+                    del st.session_state['latest_wiki_content']
+                st.rerun()
+                
+    # --- CỘT PHẢI: HÚT DATA TỪ GOOGLE DRIVE ---
+    with col2:
+        st.header("📚 2. Hút Di sản từ Google Drive")
+        
+        st.info("Bảo mật: File JSON chỉ lưu trên RAM tạm thời, dùng xong tự hủy.")
+        uploaded_json = st.file_uploader("Ném file Chìa khóa Google (.json) vào đây:", type=["json"])
+        
+        drive_service = None
+        if uploaded_json is not None:
+            try:
+                gcp_creds = json.load(uploaded_json)
+                credentials = service_account.Credentials.from_service_account_info(
+                    gcp_creds,
+                    scopes=['https://www.googleapis.com/auth/drive.readonly']
+                )
+                drive_service = build('drive', 'v3', credentials=credentials)
+                st.success("✅ Đã kết nối thành công với đường ống ngầm Google Drive!")
+            except Exception as e:
+                st.error(f"❌ Lỗi đọc file JSON: {e}")
+
+        if not st.session_state.gemini_api_key:
+            st.error("⚠️ Sếp phải nhập Gemini API Key ở bên trái trước.")
+        elif drive_service is not None:
+            drive_url = st.text_input("🔗 Link Thư mục lớn (Chứa nhiều sub-folders):")
+            
+            # Ô CHỌN PHẠM VI XỬ LÝ (CHIA ĐỢT)
+            col_a, col_b = st.columns(2)
+            with col_a: start_idx = st.number_input("Hút từ file số:", min_value=1, value=1)
+            with col_b: end_idx = st.number_input("Đến file số:", min_value=1, value=20)
+
+            if drive_url and st.button("🚀 HÚT THEO ĐỢT", use_container_width=True):
+                try:
+                    folder_id = drive_url.split('/folders/')[1].split('?')[0] if '/folders/' in drive_url else drive_url.split('/d/')[1].split('/')[0]
+                    
+                    with st.status("🔍 Đang rà soát danh sách tài liệu...", expanded=True) as status:
+                        all_files = get_all_files_recursive(drive_service, folder_id)
+                        
+                        # Lọc lấy đúng đoạn sếp yêu cầu
+                        files_to_process = all_files[start_idx-1 : end_idx]
+                        
+                        st.write(f"🎯 Tổng kho có {len(all_files)} file. Đang xử lý đợt này: {len(files_to_process)} file (Từ #{start_idx} đến #{end_idx})")
+                        
+                        for i, file_item in enumerate(files_to_process):
+                            file_id = file_item['id']
+                            file_name = file_item['name']
+                            mime_type = file_item.get('mimeType', '')
+                            
+                            st.write(f"[{i+1}/{len(files_to_process)}] Đang xử lý: {file_name}...")
+                            
+                            try:
+                                # MÀNG LỌC THÔNG MINH
+                                if mime_type == 'application/vnd.google-apps.folder':
+                                    st.write(f"   ⏭️ Bỏ qua {file_name} (Vì đây là Thư mục con)")
+                                    continue
+                                    
+                                exportable_types = [
+                                    'application/vnd.google-apps.document', 
+                                    'application/vnd.google-apps.spreadsheet', 
+                                    'application/vnd.google-apps.presentation'
+                                ]
+                                
+                                if mime_type in exportable_types:
+                                    st.write("   ... Ép sang PDF...")
+                                    request = drive_service.files().export_media(fileId=file_id, mimeType='application/pdf')
+                                    file_suffix = ".pdf"
+                                elif 'vnd.google-apps' in mime_type:
+                                    st.write(f"   ⏭️ Bỏ qua {file_name} (Google Form/Site/Shortcut không thể tải)")
+                                    continue
+                                else:
+                                    request = drive_service.files().get_media(fileId=file_id)
+                                    file_suffix = f".{file_name.split('.')[-1]}" if '.' in file_name else ".tmp"
+                                
+                                # BẮT ĐẦU HÚT
+                                with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp:
+                                    downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20)
+                                    done = False
+                                    while done is False:
+                                        d_status, done = downloader.next_chunk()
+                                    tmp_path = tmp.name
+
+                                client = genai.Client(api_key=st.session_state.gemini_api_key)
+                                gemini_file = client.files.upload(file=tmp_path)
+                                
+                                while gemini_file.state == "PROCESSING":
+                                    time.sleep(5)
+                                    gemini_file = client.files.get(name=gemini_file.name)
+                                
+                                if gemini_file.state == "FAILED":
+                                    st.error(f"❌ Lỗi: Gemini từ chối file {file_name}")
+                                else:
+                                    st.session_state.uploaded_gemini_files.append(gemini_file)
+                                
+                                os.remove(tmp_path)
+                                
+                                if i < len(files_to_process) - 1:
+                                    time.sleep(15) # Nghỉ làm mát API
+                                    
+                            except Exception as e:
+                                st.error(f"❌ Thất bại với file này: {e}")
+                                
+                        status.update(label=f"✅ Đã nuốt xong đợt từ {start_idx} đến {end_idx}!", state="complete")
+                except Exception as e:
+                    st.error(f"❌ Lỗi xử lý Drive: {e}")
+
+    st.divider()
+    
+    # --- KHÚC DƯỚI: LÒ PHẢN ỨNG VÀ BĂNG CHUYỀN WIKI ---
+    if len(st.session_state.uploaded_gemini_files) > 0:
         st.subheader("🕵️ 3. Chưng Cất Tri Thức (Ép Xung AI)")
         
         master_prompt = """You are an elite Wyckoff Quant Agent. Analyze the provided materials (videos, images, PDFs) from Roman Bogomazov's lectures. 
@@ -98,33 +213,26 @@ Output using exactly this Markdown structure:
             st.session_state.latest_wiki_content = "# TỔNG HỢP WIKI WYCKOFF (ROMAN)\n\n"
             total_files = len(st.session_state.uploaded_gemini_files)
             
-            # Thanh tiến độ xịn xò để sếp không phải ngóng
             progress_bar = st.progress(0, text="Chuẩn bị khởi động lò phản ứng...")
             status_text = st.empty()
             
             client = genai.Client(api_key=st.session_state.gemini_api_key)
             
             for i, gemini_file in enumerate(st.session_state.uploaded_gemini_files):
-                # Cập nhật trạng thái cho sếp biết
                 progress_bar.progress((i) / total_files, text=f"Đang chưng cất bài học {i+1}/{total_files}...")
                 status_text.info(f"⏳ Đang phân tích: Tài liệu số {i+1}. Chờ chút nhé sếp...")
                 
                 try:
-                    # Truyền TỪNG FILE MỘT + master prompt vào AI
                     prompt_parts = [gemini_file, master_prompt]
-                    
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=prompt_parts
                     )
                     
-                    # Ghép bài mới vào cuốn Wiki tổng
                     st.session_state.latest_wiki_content += f"\n\n---\n## TÀI LIỆU SỐ {i+1}\n\n"
                     st.session_state.latest_wiki_content += response.text
-                    
                     status_text.success(f"✅ Đã đúc kết xong Tài liệu số {i+1}!")
                     
-                    # Làm mát AI 15 giây để không bị khóa mõm
                     if i < total_files - 1:
                         status_text.warning("⏱️ Đang làm mát lò AI 15 giây trước khi nhai bài tiếp theo...")
                         time.sleep(15)
@@ -132,11 +240,10 @@ Output using exactly this Markdown structure:
                 except Exception as e:
                     status_text.error(f"❌ Đặc vụ bị vấp ở Tài liệu số {i+1}: {e}")
             
-            # Cập nhật khi hoàn tất 100%
             progress_bar.progress(100, text="✅ Dây chuyền hoàn tất!")
             status_text.success("🎉 ĐÃ ĐÚC KẾT XONG TOÀN BỘ WIKI! Sếp xem trước và tải về bên dưới.")
         
-        # KHÚC XUẤT FILE TẢI VỀ
+        # HIỂN THỊ KẾT QUẢ VÀ NÚT TẢI XUỐNG
         if 'latest_wiki_content' in st.session_state:
             with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
                 st.markdown(st.session_state.latest_wiki_content)
@@ -153,9 +260,12 @@ Output using exactly this Markdown structure:
             )
 
 # ==========================================
-# PHÒNG SỐ 2 & 3: GIỮ NGUYÊN KHÔNG MẤT
+# PHÒNG SỐ 2 & 3
 # ==========================================
 with tab2:
-    st.header("📐 Đôi Mắt X-Ray")
+    st.header("📐 Đôi Mắt X-Ray: Giải mã cấu trúc giá")
+    st.info("Trạng thái: Chờ ráp thuật toán PineScript lượng hóa độ dốc (ATR).")
+
 with tab3:
-    st.header("🎯 Thực Chiến (POE)")
+    st.header("🎯 Bàn Cờ Thực Chiến: Quản trị Rủi Ro & POE")
+    st.info("Trạng thái: Chờ thiết lập logic từ Đặc vụ Roman.")
