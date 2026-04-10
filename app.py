@@ -71,7 +71,7 @@ with tab1:
             client = genai.Client(api_key=st.session_state.gemini_api_key)
             
             uploaded_files = st.file_uploader(
-                "Kéo thả Video MP4 hoặc sách PDF vào đây", 
+                "Kéo thả Video MP4 hoặc sách PDF, hoặc file hình ảnh vào đây", 
                 type=['mp4', 'pdf', 'txt','png','jpg', 'jpeg','ppt'], 
                 accept_multiple_files=True
             )
