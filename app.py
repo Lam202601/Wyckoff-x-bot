@@ -72,7 +72,7 @@ with tab1:
             
             uploaded_files = st.file_uploader(
                 "Kéo thả Video MP4 hoặc sách PDF, hoặc file hình ảnh vào đây", 
-                type=['mp4', 'pdf', 'txt','png','jpg', 'jpeg','ppt'], 
+                type=['mp4', 'pdf', 'txt','png','jpg', 'jpeg','pptx'], 
                 accept_multiple_files=True
             )
             
