@@ -80,13 +80,13 @@ with tab1:
             if drive_url and st.button("🚀 HÚT TRỌN Ổ DỮ LIỆU", use_container_width=True):
                 files_to_process = []
                 
-                # PHÂN LOẠI LINK: THƯ MỤC hay FILE LẺ?
                 try:
                     if '/folders/' in drive_url:
                         folder_id = drive_url.split('/folders/')[1].split('?')[0]
+                        # NÂNG CẤP: Lấy thêm định dạng file (mimeType) để nhận diện Google Docs
                         results = drive_service.files().list(
                             q=f"'{folder_id}' in parents and trashed=false", 
-                            fields="files(id, name)"
+                            fields="files(id, name, mimeType)"
                         ).execute()
                         files_to_process = results.get('files', [])
                         if not files_to_process:
@@ -94,27 +94,34 @@ with tab1:
                             st.stop()
                     elif '/file/d/' in drive_url:
                         file_id = drive_url.split('/d/')[1].split('/')[0]
-                        file_meta = drive_service.files().get(fileId=file_id, fields='name').execute()
-                        files_to_process = [{'id': file_id, 'name': file_meta.get('name')}]
+                        file_meta = drive_service.files().get(fileId=file_id, fields='name, mimeType').execute()
+                        files_to_process = [{'id': file_id, 'name': file_meta.get('name'), 'mimeType': file_meta.get('mimeType')}]
                     else:
                         st.error("Link không đúng chuẩn Google Drive.")
                         st.stop()
                 except Exception as e:
-                    st.error(f"❌ Lỗi đọc link: {e}. Sếp nhớ Share quyền cho email Đặc vụ nhé!")
+                    st.error(f"❌ Lỗi đọc link: {e}")
                     st.stop()
 
-                # VÒNG LẶP HÚT TỰ ĐỘNG TOÀN BỘ FILE TRONG THƯ MỤC
                 st.write(f"🎯 Đặc vụ đã khóa mục tiêu: {len(files_to_process)} tài liệu.")
                 
                 for i, file_item in enumerate(files_to_process):
                     file_id = file_item['id']
                     file_name = file_item['name']
+                    mime_type = file_item.get('mimeType', '')
                     
                     with st.status(f"[{i+1}/{len(files_to_process)}] Đang xử lý: {file_name}...", expanded=True) as status:
                         try:
-                            request = drive_service.files().get_media(fileId=file_id)
+                            # CƠ CHẾ TỰ ĐỘNG ÉP GOOGLE DOCS SANG PDF
+                            if 'vnd.google-apps' in mime_type:
+                                st.write("   ... Phát hiện Google Docs/Sheets. Đang tự động ép sang PDF...")
+                                request = drive_service.files().export_media(fileId=file_id, mimeType='application/pdf')
+                                file_suffix = ".pdf"
+                            else:
+                                request = drive_service.files().get_media(fileId=file_id)
+                                file_suffix = f".{file_name.split('.')[-1]}" if '.' in file_name else ".tmp"
                             
-                            with tempfile.NamedTemporaryFile(delete=False, suffix=f".{file_name.split('.')[-1]}") as tmp:
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp:
                                 downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20)
                                 done = False
                                 while done is False:
@@ -138,9 +145,8 @@ with tab1:
                             
                             os.remove(tmp_path)
                             
-                            # CƠ CHẾ NÉ TRẠM THU PHÍ (Làm mát API)
                             if i < len(files_to_process) - 1:
-                                st.info("⏱️ Máy đang nghỉ 15 giây để né cảnh báo quá tải (429) của Google...")
+                                st.info("⏱️ Máy đang nghỉ 15 giây để né cảnh báo quá tải của Google...")
                                 time.sleep(15)
                                 
                         except Exception as e:
