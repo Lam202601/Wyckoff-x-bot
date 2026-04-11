@@ -230,9 +230,9 @@ Structure:
 # [Topic Name]
 **1. Roman's Insight:** (Spoken advice from transcript)
 **2. Price/Volume Behavior:** (Visual evidence from PDF charts)
-**3. Quant Logic:** (Mathematical rules: Spread, Volume vs SMA, Position of Close, etc.)
+**3. Quant Logic:** (CRITICAL: You MUST write explicit pseudo-code, algorithmic structures, or mathematical formulas to detect this event. Example: `Current_Volume > (2.0 * SMA(Volume, 20))`, `Spread < ATR(14)`, `Close_Position <= 0.3`. DO NOT just use descriptive paragraphs).
 **4. Context & Traps:** (Phases, Springs, Upthrusts context)"""
-
+        
         if st.button("🚀 CHẠY LÒ PHẢN ỨNG (GOM TẤT CẢ ĐỂ ĐỐI CHIẾU)", type="primary", use_container_width=True):
             with st.status("🔥 Đang thực hiện cú 'Kẹp Chả' đa phương thức...", expanded=True) as status:
                 try:
