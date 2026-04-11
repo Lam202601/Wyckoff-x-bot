@@ -15,11 +15,33 @@ st.set_page_config(page_title="ROMAN-X | Agentic Quant", page_icon="🏛️", la
 st.title("🏛️ ROMAN-X: HỘI ĐỒNG ĐẦU TƯ TỰ TRỊ")
 st.divider()
 
-# KHỞI TẠO BỘ NHỚ LÕI
+# ==========================================
+# KHỞI TẠO BỘ NHỚ LÕI (Cấy ghép thêm logic lưu file)
+# ==========================================
+KEY_FILE = "roman_keys.json"
+
+def load_keys():
+    if os.path.exists(KEY_FILE):
+        try:
+            with open(KEY_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return {}
+    return {}
+
+def save_keys(keys_dict):
+    with open(KEY_FILE, "w") as f:
+        json.dump(keys_dict, f)
+
+saved_keys = load_keys()
+
 if 'gemini_api_key' not in st.session_state:
-    st.session_state.gemini_api_key = ""
+    st.session_state.gemini_api_key = saved_keys.get("gemini_api_key", "")
 if 'uploaded_gemini_files' not in st.session_state:
     st.session_state.uploaded_gemini_files = []
+# Bộ nhớ ghim JSON Drive để không bị mất khi xóa bộ nhớ tạm
+if 'gcp_creds' not in st.session_state:
+    st.session_state.gcp_creds = None
 
 # ==========================================
 # 2. KHUNG SƯỜN: 3 TABS CHIẾN LƯỢC
@@ -62,6 +84,9 @@ with tab1:
         api_input = st.text_input("Gemini API Key:", type="password", value=st.session_state.gemini_api_key)
         if st.button("Lưu Chìa Khóa AI"):
             st.session_state.gemini_api_key = api_input
+            save_keys({"gemini_api_key": api_input}) # LƯU THẲNG XUỐNG Ổ CỨNG
+            st.success("✅ Đã ghim Key vĩnh viễn!")
+            time.sleep(1)
             st.rerun()
 
         if len(st.session_state.uploaded_gemini_files) > 0:
@@ -76,21 +101,34 @@ with tab1:
     with col2:
         st.header("📚 2. Hút Di sản từ Google Drive")
         
-        st.info("Bảo mật: File JSON chỉ lưu trên RAM tạm thời, dùng xong tự hủy.")
-        uploaded_json = st.file_uploader("Ném file Chìa khóa Google (.json) vào đây:", type=["json"])
-        
+        # CHỈ HIỂN THỊ Ô UPLOAD KHI CHƯA CÓ JSON
+        if st.session_state.gcp_creds is None:
+            st.info("Bảo mật: File JSON chỉ lưu trên RAM tạm thời, dùng xong tự hủy.")
+            uploaded_json = st.file_uploader("Ném file Chìa khóa Google (.json) vào đây:", type=["json"])
+            
+            if uploaded_json is not None:
+                try:
+                    st.session_state.gcp_creds = json.load(uploaded_json) # GHIM VÀO NÃO
+                    st.rerun() # Tải lại trang để giấu ô upload đi
+                except Exception as e:
+                    st.error(f"❌ Lỗi đọc file JSON: {e}")
+
         drive_service = None
-        if uploaded_json is not None:
+        # NẾU ĐÃ CÓ JSON TRONG NÃO THÌ MỞ KẾT NỐI DRIVE
+        if st.session_state.gcp_creds is not None:
             try:
-                gcp_creds = json.load(uploaded_json)
                 credentials = service_account.Credentials.from_service_account_info(
-                    gcp_creds,
+                    st.session_state.gcp_creds,
                     scopes=['https://www.googleapis.com/auth/drive.readonly']
                 )
                 drive_service = build('drive', 'v3', credentials=credentials)
-                st.success("✅ Đã kết nối thành công với đường ống ngầm Google Drive!")
+                st.success("✅ Kết nối Drive đã được GHIM! (Không sợ mất khi xoá bộ nhớ)")
+                if st.button("🔌 Hủy ghim kết nối Drive", size="small"):
+                    st.session_state.gcp_creds = None
+                    st.rerun()
             except Exception as e:
-                st.error(f"❌ Lỗi đọc file JSON: {e}")
+                st.error(f"❌ Lỗi kết nối: {e}")
+                st.session_state.gcp_creds = None
 
         if not st.session_state.gemini_api_key:
             st.error("⚠️ Sếp phải nhập Gemini API Key ở bên trái trước.")
