@@ -216,7 +216,7 @@ with tab1:
 CONTEXT: You are provided with multiple Transcripts (text) and Slides/Charts (PDFs) of Roman Bogomazov's lectures.
 
 CRITICAL INSTRUCTION FOR FILE MATCHING (KẸP CHẢ):
-You must strictly group and correlate files based on their filenames. Explicitly match the Transcript file with its corresponding Slide/Chart PDF that shares the same base name (e.g., match "Buoi_1_Transcript" EXACTLY with "Buoi_1_Slides"). 
+You must strictly group and correlate files based on their filenames. Explicitly match the Transcript file with its corresponding Slide/Chart PDF that shares the same base name (e.g., match "Session_1_Transcript" EXACTLY with "Session_1_Slides"). 
 ABSOLUTELY DO NOT mix verbal insights from one session with visual charts from a different session.
 
 CRITICAL INSTRUCTION FOR KNOWLEDGE DISTILLATION: 
