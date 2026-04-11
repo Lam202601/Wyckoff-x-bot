@@ -16,7 +16,7 @@ st.title("🏛️ ROMAN-X: HỘI ĐỒNG ĐẦU TƯ TỰ TRỊ")
 st.divider()
 
 # ==========================================
-# KHỞI TẠO BỘ NHỚ LÕI (Cấy ghép thêm logic lưu file)
+# KHỞI TẠO BỘ NHỚ LÕI (GHI VÀO Ổ CỨNG)
 # ==========================================
 KEY_FILE = "roman_keys.json"
 
@@ -39,7 +39,6 @@ if 'gemini_api_key' not in st.session_state:
     st.session_state.gemini_api_key = saved_keys.get("gemini_api_key", "")
 if 'uploaded_gemini_files' not in st.session_state:
     st.session_state.uploaded_gemini_files = []
-# Bộ nhớ ghim JSON Drive để không bị mất khi xóa bộ nhớ tạm
 if 'gcp_creds' not in st.session_state:
     st.session_state.gcp_creds = None
 
@@ -62,7 +61,6 @@ def get_all_files_recursive(service, folder_id):
             items = results.get('files', [])
             for item in items:
                 if item['mimeType'] == 'application/vnd.google-apps.folder':
-                    # Nếu là thư mục, tự động chui vào sâu hơn
                     all_files.extend(get_all_files_recursive(service, item['id']))
                 else:
                     all_files.append(item)
@@ -84,7 +82,7 @@ with tab1:
         api_input = st.text_input("Gemini API Key:", type="password", value=st.session_state.gemini_api_key)
         if st.button("Lưu Chìa Khóa AI"):
             st.session_state.gemini_api_key = api_input
-            save_keys({"gemini_api_key": api_input}) # LƯU THẲNG XUỐNG Ổ CỨNG
+            save_keys({"gemini_api_key": api_input})
             st.success("✅ Đã ghim Key vĩnh viễn!")
             time.sleep(1)
             st.rerun()
@@ -101,20 +99,20 @@ with tab1:
     with col2:
         st.header("📚 2. Hút Di sản từ Google Drive")
         
-        # CHỈ HIỂN THỊ Ô UPLOAD KHI CHƯA CÓ JSON
+        # CHỈ HIỂN THỊ Ô NẠP KHI CHƯA CÓ JSON
         if st.session_state.gcp_creds is None:
             st.info("Bảo mật: File JSON chỉ lưu trên RAM tạm thời, dùng xong tự hủy.")
             uploaded_json = st.file_uploader("Ném file Chìa khóa Google (.json) vào đây:", type=["json"])
             
             if uploaded_json is not None:
                 try:
-                    st.session_state.gcp_creds = json.load(uploaded_json) # GHIM VÀO NÃO
-                    st.rerun() # Tải lại trang để giấu ô upload đi
+                    st.session_state.gcp_creds = json.load(uploaded_json)
+                    st.rerun()
                 except Exception as e:
                     st.error(f"❌ Lỗi đọc file JSON: {e}")
 
         drive_service = None
-        # NẾU ĐÃ CÓ JSON TRONG NÃO THÌ MỞ KẾT NỐI DRIVE
+        # NẾU ĐÃ GHIM JSON VÀO NÃO
         if st.session_state.gcp_creds is not None:
             try:
                 credentials = service_account.Credentials.from_service_account_info(
@@ -122,8 +120,9 @@ with tab1:
                     scopes=['https://www.googleapis.com/auth/drive.readonly']
                 )
                 drive_service = build('drive', 'v3', credentials=credentials)
-                st.success("✅ Kết nối Drive đã được GHIM! (Không sợ mất khi xoá bộ nhớ)")
-                if st.button("🔌 Hủy ghim kết nối Drive", size="small"):
+                st.success("✅ Kết nối Drive đã được GHIM (Khỏi lo mất)!")
+                # ĐÃ XÓA size="small" Ở DÒNG BÊN DƯỚI ĐỂ KHÔNG BỊ LỖI
+                if st.button("🔌 Hủy ghim kết nối Drive"):
                     st.session_state.gcp_creds = None
                     st.rerun()
             except Exception as e:
@@ -147,7 +146,6 @@ with tab1:
                     with st.status("🔍 Đang rà soát danh sách tài liệu...", expanded=True) as status:
                         all_files = get_all_files_recursive(drive_service, folder_id)
                         
-                        # Lọc lấy đúng đoạn sếp yêu cầu
                         files_to_process = all_files[start_idx-1 : end_idx]
                         
                         st.write(f"🎯 Tổng kho có {len(all_files)} file. Đang xử lý đợt này: {len(files_to_process)} file (Từ #{start_idx} đến #{end_idx})")
@@ -160,9 +158,8 @@ with tab1:
                             st.write(f"[{i+1}/{len(files_to_process)}] Đang xử lý: {file_name}...")
                             
                             try:
-                                # MÀNG LỌC THÔNG MINH
                                 if mime_type == 'application/vnd.google-apps.folder':
-                                    st.write(f"   ⏭️ Bỏ qua {file_name} (Vì đây là Thư mục con)")
+                                    st.write(f"   ⏭️ Bỏ qua {file_name} (Thư mục con)")
                                     continue
                                     
                                 exportable_types = [
@@ -176,13 +173,12 @@ with tab1:
                                     request = drive_service.files().export_media(fileId=file_id, mimeType='application/pdf')
                                     file_suffix = ".pdf"
                                 elif 'vnd.google-apps' in mime_type:
-                                    st.write(f"   ⏭️ Bỏ qua {file_name} (Google Form/Site/Shortcut không thể tải)")
+                                    st.write(f"   ⏭️ Bỏ qua {file_name} (Form/Site/Shortcut)")
                                     continue
                                 else:
                                     request = drive_service.files().get_media(fileId=file_id)
                                     file_suffix = f".{file_name.split('.')[-1]}" if '.' in file_name else ".tmp"
                                 
-                                # BẮT ĐẦU HÚT
                                 with tempfile.NamedTemporaryFile(delete=False, suffix=file_suffix) as tmp:
                                     downloader = MediaIoBaseDownload(tmp, request, chunksize=1024*1024*20)
                                     done = False
@@ -205,7 +201,7 @@ with tab1:
                                 os.remove(tmp_path)
                                 
                                 if i < len(files_to_process) - 1:
-                                    time.sleep(15) # Nghỉ làm mát API
+                                    time.sleep(15) 
                                     
                             except Exception as e:
                                 st.error(f"❌ Thất bại với file này: {e}")
@@ -281,7 +277,6 @@ Output using exactly this Markdown structure:
             progress_bar.progress(100, text="✅ Dây chuyền hoàn tất!")
             status_text.success("🎉 ĐÃ ĐÚC KẾT XONG TOÀN BỘ WIKI! Sếp xem trước và tải về bên dưới.")
         
-        # HIỂN THỊ KẾT QUẢ VÀ NÚT TẢI XUỐNG
         if 'latest_wiki_content' in st.session_state:
             with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
                 st.markdown(st.session_state.latest_wiki_content)
