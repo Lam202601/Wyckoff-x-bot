@@ -99,7 +99,6 @@ with tab1:
     with col2:
         st.header("📚 2. Hút Di sản từ Google Drive")
         
-        # CHỈ HIỂN THỊ Ô NẠP KHI CHƯA CÓ JSON
         if st.session_state.gcp_creds is None:
             st.info("Bảo mật: File JSON chỉ lưu trên RAM tạm thời, dùng xong tự hủy.")
             uploaded_json = st.file_uploader("Ném file Chìa khóa Google (.json) vào đây:", type=["json"])
@@ -112,7 +111,6 @@ with tab1:
                     st.error(f"❌ Lỗi đọc file JSON: {e}")
 
         drive_service = None
-        # NẾU ĐÃ GHIM JSON VÀO NÃO
         if st.session_state.gcp_creds is not None:
             try:
                 credentials = service_account.Credentials.from_service_account_info(
@@ -121,7 +119,6 @@ with tab1:
                 )
                 drive_service = build('drive', 'v3', credentials=credentials)
                 st.success("✅ Kết nối Drive đã được GHIM (Khỏi lo mất)!")
-                # ĐÃ XÓA size="small" Ở DÒNG BÊN DƯỚI ĐỂ KHÔNG BỊ LỖI
                 if st.button("🔌 Hủy ghim kết nối Drive"):
                     st.session_state.gcp_creds = None
                     st.rerun()
@@ -134,7 +131,6 @@ with tab1:
         elif drive_service is not None:
             drive_url = st.text_input("🔗 Link Thư mục lớn (Chứa nhiều sub-folders):")
             
-            # Ô CHỌN PHẠM VI XỬ LÝ (CHIA ĐỢT)
             col_a, col_b = st.columns(2)
             with col_a: start_idx = st.number_input("Hút từ file số:", min_value=1, value=1)
             with col_b: end_idx = st.number_input("Đến file số:", min_value=1, value=20)
@@ -145,7 +141,6 @@ with tab1:
                     
                     with st.status("🔍 Đang rà soát danh sách tài liệu...", expanded=True) as status:
                         all_files = get_all_files_recursive(drive_service, folder_id)
-                        
                         files_to_process = all_files[start_idx-1 : end_idx]
                         
                         st.write(f"🎯 Tổng kho có {len(all_files)} file. Đang xử lý đợt này: {len(files_to_process)} file (Từ #{start_idx} đến #{end_idx})")
@@ -251,13 +246,15 @@ Output using exactly this Markdown structure:
             status_text = st.empty()
             
             client = genai.Client(api_key=st.session_state.gemini_api_key)
+            has_error = False 
             
             for i, gemini_file in enumerate(st.session_state.uploaded_gemini_files):
                 progress_bar.progress((i) / total_files, text=f"Đang chưng cất bài học {i+1}/{total_files}...")
-                status_text.info(f"⏳ Đang phân tích: Tài liệu số {i+1}. Chờ chút nhé sếp...")
+                status_text.info(f"⏳ Đang phân tích: Tài liệu số {i+1}. Sếp chờ chút nhé...")
                 
                 try:
                     prompt_parts = [gemini_file, master_prompt]
+                    # TRẢ LẠI MODEL XỊN 2.5 FLASH CỦA SẾP
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=prompt_parts
@@ -267,15 +264,22 @@ Output using exactly this Markdown structure:
                     st.session_state.latest_wiki_content += response.text
                     status_text.success(f"✅ Đã đúc kết xong Tài liệu số {i+1}!")
                     
-                    if i < total_files - 1:
-                        status_text.warning("⏱️ Đang làm mát lò AI 15 giây trước khi nhai bài tiếp theo...")
-                        time.sleep(15)
-                        
                 except Exception as e:
-                    status_text.error(f"❌ Đặc vụ bị vấp ở Tài liệu số {i+1}: {e}")
+                    has_error = True
+                    # KHÔNG DÙNG status_text ĐỂ TRÁNH BỊ GHI ĐÈ, IN THẲNG LÊN UI CỐ ĐỊNH
+                    st.error(f"❌ Đặc vụ bị vấp ở Tài liệu số {i+1} (Có thể do quá Quota API): {e}")
+                
+                # BẮT BUỘC NGHỈ KỂ CẢ KHI CÓ LỖI HAY KHÔNG ĐỂ NÉ 429 QUOTA
+                if i < total_files - 1:
+                    status_text.warning("⏱️ Đang làm mát lò AI 15 giây trước khi nhai bài tiếp theo...")
+                    time.sleep(15)
             
             progress_bar.progress(100, text="✅ Dây chuyền hoàn tất!")
-            status_text.success("🎉 ĐÃ ĐÚC KẾT XONG TOÀN BỘ WIKI! Sếp xem trước và tải về bên dưới.")
+            
+            if has_error:
+                st.warning("⚠️ Dây chuyền đã dừng lại, một số bài học bị lỗi. Sếp kiểm tra lỗi đỏ ở trên.")
+            else:
+                st.success("🎉 ĐÃ ĐÚC KẾT XONG TOÀN BỘ WIKI! Sếp xem trước và tải về bên dưới.")
         
         if 'latest_wiki_content' in st.session_state:
             with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
