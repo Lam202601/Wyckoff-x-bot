@@ -270,12 +270,84 @@ Structure:
             )
 
 # ==========================================
-# PHÒNG SỐ 2 & 3
+# PHÒNG SỐ 2: ĐÔI MẮT X-RAY (DỊCH SANG PINESCRIPT)
 # ==========================================
 with tab2:
-    st.header("📐 Đôi Mắt X-Ray: Giải mã cấu trúc giá")
-    st.info("Trạng thái: Chờ ráp thuật toán PineScript lượng hóa độ dốc (ATR).")
+    st.header("📐 Đôi Mắt X-Ray: Biên dịch PineScript Master")
+    st.info("Nhiệm vụ: Hợp nhất toàn bộ các mảnh Wiki (.md) thành một Chỉ báo TradingView duy nhất, logic xuyên suốt.")
 
+    # 1. Phễu nhận NHIỀU file Markdown cùng lúc
+    uploaded_mds = st.file_uploader(
+        "📚 Ném tất cả các file Wiki (.md) của sếp vào đây (Cho phép ném nhiều file):", 
+        type=["md"], 
+        accept_multiple_files=True
+    )
+
+    if uploaded_mds:
+        st.success(f"🎯 Đã nhận {len(uploaded_mds)} mảnh ghép tri thức. Sẵn sàng hợp nhất!")
+        
+        # SIÊU PROMPT: ÉP AI TƯ DUY TỔNG THỂ (CONTEXT STUFFING)
+        master_codegen_prompt = """You are the ROMAN-X Master Architect & Expert PineScript v5 Coder. 
+CONTEXT: You are provided with a massive concatenated text of multiple Wyckoff Wiki Markdown files distilled from Roman Bogomazov.
+
+CRITICAL TASK:
+1. Read ALL the provided text as a single, continuous, interconnected body of knowledge.
+2. Synthesize EVERY 'Quant Logic' rule (SC, AR, ST, CHoBeh, CHoCh, Spring, etc.) found in the text into ONE SINGLE, COHESIVE, and BUG-FREE TradingView PineScript v5 Indicator.
+3. ABSOLUTELY NO CONTRADICTIONS: Ensure the logic is sequential. For example, an 'Automatic Rally' should only be identified AFTER a 'Selling Climax' has occurred. A 'Spring' must be evaluated in the context of the established Trading Range.
+
+PINESCRIPT REQUIREMENTS:
+- version=5
+- `indicator("ROMAN-X Master Wyckoff", overlay=true, max_labels_count=500)`
+- Create `input.float` or `input.int` variables for all thresholds (e.g., Volume multipliers, ATR multipliers) so the user can easily tweak them in the TradingView settings.
+- Use `plotshape` or `label.new` to clearly print events (SC, AR, ST, Spring) directly on the candlesticks.
+- DO NOT just write pseudo-code. Write executable, compiled PineScript v5 code.
+
+OUTPUT FORMAT:
+- Return ONLY the clean PineScript code block. 
+- NO conversational filler. NO markdown outside the code block. Just the raw code ready to be pasted into TradingView."""
+
+        if st.button("🚀 HỢP NHẤT TẤT CẢ & XUẤT CODE TRADINGVIEW", type="primary", use_container_width=True):
+            with st.status("📡 Đang nhồi ngữ cảnh và biên dịch hệ thống (Quá trình này tốn vài chục giây)...", expanded=True) as status:
+                try:
+                    # GOM TẤT CẢ FILE THÀNH 1 CUỐN SÁCH KHỔNG LỒ
+                    all_wiki_content = "=== ROMAN WYCKOFF MASTER KNOWLEDGE BASE ===\n\n"
+                    for md_file in uploaded_mds:
+                        content = md_file.read().decode("utf-8")
+                        all_wiki_content += f"\n\n--- SOURCE PART: {md_file.name} ---\n\n" + content
+                    
+                    client = genai.Client(api_key=st.session_state.gemini_api_key)
+                    
+                    # GỬI DUY NHẤT 1 LỆNH (ONE-SHOT) ĐỂ AI THẤY TOÀN BỘ BỨC TRANH
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash', 
+                        contents=[all_wiki_content, master_codegen_prompt]
+                    )
+                    
+                    st.session_state.master_pinescript = response.text
+                    status.update(label="✅ Đã biên dịch xong Master Code!", state="complete")
+                    
+                except Exception as e:
+                    st.error(f"❌ Lỗi biên dịch: {e}")
+
+    # 2. Hiển thị Code thành phẩm và nút Tải về
+    if 'master_pinescript' in st.session_state:
+        st.subheader("📝 Master PineScript v5 (Sẵn sàng cho TradingView)")
+        
+        # Lọc bỏ các ký tự thừa (```pinescript) nếu AI lỡ sinh ra
+        clean_code = st.session_state.master_pinescript.replace("```pinescript", "").replace("```", "").strip()
+        
+        st.code(clean_code, language='pinescript')
+        
+        st.download_button(
+            label="📥 TẢI FILE CODE (.TXT) VỀ MÁY",
+            data=clean_code,
+            file_name="Roman_X_Master_Indicator.txt",
+            mime="text/plain",
+            type="primary"
+        )
+# ==========================================
+# PHÒNG SỐ 3: Bàn Cờ Thực Chiến
+# ==========================================
 with tab3:
     st.header("🎯 Bàn Cờ Thực Chiến: Quản trị Rủi Ro & POE")
     st.info("Trạng thái: Chờ thiết lập logic từ Đặc vụ Roman.")
