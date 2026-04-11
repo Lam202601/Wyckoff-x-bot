@@ -256,7 +256,7 @@ Output using exactly this Markdown structure:
                     prompt_parts = [gemini_file, master_prompt]
                     # TRẢ LẠI MODEL XỊN 2.5 FLASH CỦA SẾP
                     response = client.models.generate_content(
-                        model='gemini-2.0-flash',
+                        model='gemini-2.5-flash',
                         contents=prompt_parts
                     )
                     
