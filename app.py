@@ -213,11 +213,15 @@ with tab1:
         
         # PROMPT ĐÃ ĐƯỢC CẬP NHẬT ĐÚNG NHƯ CAM KẾT
         master_prompt = """You are an elite Wyckoff Quant Agent. 
-CONTEXT: You are provided with both Transcripts (text) and Slides/Charts (PDFs) of Roman Bogomazov's lectures.
+CONTEXT: You are provided with multiple Transcripts (text) and Slides/Charts (PDFs) of Roman Bogomazov's lectures.
 
-CRITICAL INSTRUCTION: 
-Use the provided transcript for verbal insights and core philosophy. 
-CRUCIAL: Correlate these spoken insights with the visual price/volume charts in the PDF files to define precise, quantitative rules. 
+CRITICAL INSTRUCTION FOR FILE MATCHING (KẸP CHẢ):
+You must strictly group and correlate files based on their filenames. Explicitly match the Transcript file with its corresponding Slide/Chart PDF that shares the same base name (e.g., match "Buoi_1_Transcript" EXACTLY with "Buoi_1_Slides"). 
+ABSOLUTELY DO NOT mix verbal insights from one session with visual charts from a different session.
+
+CRITICAL INSTRUCTION FOR KNOWLEDGE DISTILLATION: 
+Use the matched transcript for verbal insights and core philosophy. 
+CRUCIAL: Correlate these spoken insights with the visual price/volume charts in the matched PDF file to define precise, quantitative rules. 
 
 Output a highly detailed Wiki Markdown file in 100% ENGLISH.
 Strictly preserve Roman's terminology.
