@@ -207,91 +207,60 @@ with tab1:
 
     st.divider()
     
-    # --- KHÚC DƯỚI: LÒ PHẢN ỨNG VÀ BĂNG CHUYỀN WIKI ---
+    # --- KHÚC DƯỚI: LÒ PHẢN ỨNG "KẸP CHẢ" (GOM FILE ĐỂ ĐỐI CHIẾU) ---
     if len(st.session_state.uploaded_gemini_files) > 0:
-        st.subheader("🕵️ 3. Chưng Cất Tri Thức (Ép Xung AI)")
+        st.subheader("🕵️ 3. Chưng Cất Tri Thức (Ép Xung AI - Kẹp Chả)")
         
-        master_prompt = """You are an elite Wyckoff Quant Agent. Analyze the provided materials (videos, images, PDFs) from Roman Bogomazov's lectures. 
-Distill this knowledge into a highly detailed, purely quantitative Wiki Markdown file.
+        # PROMPT ĐÃ ĐƯỢC CẬP NHẬT ĐÚNG NHƯ CAM KẾT
+        master_prompt = """You are an elite Wyckoff Quant Agent. 
+CONTEXT: You are provided with both Transcripts (text) and Slides/Charts (PDFs) of Roman Bogomazov's lectures.
 
-CRITICAL RULES:
-1. Write the ENTIRE output in 100% ENGLISH. Do not translate anything.
-2. Strictly preserve Roman Bogomazov's exact terminology.
-3. Focus heavily on quantitative logic (rules that can be coded into trading algorithms).
+CRITICAL INSTRUCTION: 
+Use the provided transcript for verbal insights and core philosophy. 
+CRUCIAL: Correlate these spoken insights with the visual price/volume charts in the PDF files to define precise, quantitative rules. 
 
-Output using exactly this Markdown structure:
+Output a highly detailed Wiki Markdown file in 100% ENGLISH.
+Strictly preserve Roman's terminology.
 
-# [Short Topic Name]
-**Metadata:**
-- **Tags:** #Wyckoff_Theory, #[Relevant_Keywords]
-- **Links:** (Link to other core concepts using double brackets, e.g., [[Phase C]], [[Spring]], [[Change of Character]], [[Composite Operator]])
+Structure:
+# [Topic Name]
+**1. Roman's Insight:** (Spoken advice from transcript)
+**2. Price/Volume Behavior:** (Visual evidence from PDF charts)
+**3. Quant Logic:** (Mathematical rules: Spread, Volume vs SMA, Position of Close, etc.)
+**4. Context & Traps:** (Phases, Springs, Upthrusts context)"""
 
-**1. Roman's Insight:**
-(Extract the most critical spoken advice, core philosophy, or specific nuances Roman emphasizes about this topic).
-
-**2. Price/Volume Behavior:**
-(Specific details on price spread, closing position, and volume signatures).
-
-**3. Quant Logic:**
-(If writing an algorithmic trading script to detect this event, what are the exact mathematical or logical conditions? E.g., Volume < 20-period SMA, Spread < ATR, Close within the lower third of the bar, etc.).
-
-**4. Context & Traps:**
-(Where does this event fit within the overall Accumulation/Distribution schematic? What are the common traps Smart Money uses here?)"""
-
-        if st.button("🔥 CHẠY DÂY CHUYỀN TẠO WIKI TỰ ĐỘNG", type="primary", use_container_width=True):
-            st.session_state.latest_wiki_content = "# TỔNG HỢP WIKI WYCKOFF (ROMAN)\n\n"
-            total_files = len(st.session_state.uploaded_gemini_files)
-            
-            progress_bar = st.progress(0, text="Chuẩn bị khởi động lò phản ứng...")
-            status_text = st.empty()
-            
-            client = genai.Client(api_key=st.session_state.gemini_api_key)
-            has_error = False 
-            
-            for i, gemini_file in enumerate(st.session_state.uploaded_gemini_files):
-                progress_bar.progress((i) / total_files, text=f"Đang chưng cất bài học {i+1}/{total_files}...")
-                status_text.info(f"⏳ Đang phân tích: Tài liệu số {i+1}. Sếp chờ chút nhé...")
-                
+        if st.button("🚀 CHẠY LÒ PHẢN ỨNG (GOM TẤT CẢ ĐỂ ĐỐI CHIẾU)", type="primary", use_container_width=True):
+            with st.status("🔥 Đang thực hiện cú 'Kẹp Chả' đa phương thức...", expanded=True) as status:
                 try:
-                    prompt_parts = [gemini_file, master_prompt]
-                    # TRẢ LẠI MODEL XỊN 2.5 FLASH CỦA SẾP
+                    client = genai.Client(api_key=st.session_state.gemini_api_key)
+                    
+                    # THAY ĐỔI CHIẾN THUẬT: KHÔNG DÙNG VÒNG LẶP CHO TỪNG FILE
+                    # GOM TẤT CẢ FILE VÀO 1 DANH SÁCH ĐỂ AI ĐỐI CHIẾU CÙNG LÚC
+                    prompt_parts = st.session_state.uploaded_gemini_files + [master_prompt]
+                    
+                    st.write("📡 Đang gửi toàn bộ Transcript và PDF lên não bộ AI...")
+                    
                     response = client.models.generate_content(
-                        model='gemini-2.5-flash',
+                        model='gemini-2.5-flash', # Model xịn 1 triệu token
                         contents=prompt_parts
                     )
                     
-                    st.session_state.latest_wiki_content += f"\n\n---\n## TÀI LIỆU SỐ {i+1}\n\n"
-                    st.session_state.latest_wiki_content += response.text
-                    status_text.success(f"✅ Đã đúc kết xong Tài liệu số {i+1}!")
+                    st.session_state.latest_wiki_content = response.text
+                    status.update(label="✅ Đã chưng cất và đối chiếu xong!", state="complete")
+                    st.success("🎉 Wiki đã được tạo ra bằng cách khớp lời giảng với biểu đồ!")
                     
                 except Exception as e:
-                    has_error = True
-                    # KHÔNG DÙNG status_text ĐỂ TRÁNH BỊ GHI ĐÈ, IN THẲNG LÊN UI CỐ ĐỊNH
-                    st.error(f"❌ Đặc vụ bị vấp ở Tài liệu số {i+1} (Có thể do quá Quota API): {e}")
-                
-                # BẮT BUỘC NGHỈ KỂ CẢ KHI CÓ LỖI HAY KHÔNG ĐỂ NÉ 429 QUOTA
-                if i < total_files - 1:
-                    status_text.warning("⏱️ Đang làm mát lò AI 15 giây trước khi nhai bài tiếp theo...")
-                    time.sleep(15)
-            
-            progress_bar.progress(100, text="✅ Dây chuyền hoàn tất!")
-            
-            if has_error:
-                st.warning("⚠️ Dây chuyền đã dừng lại, một số bài học bị lỗi. Sếp kiểm tra lỗi đỏ ở trên.")
-            else:
-                st.success("🎉 ĐÃ ĐÚC KẾT XONG TOÀN BỘ WIKI! Sếp xem trước và tải về bên dưới.")
+                    st.error(f"❌ Đặc vụ bị nghẽn mạch: {e}")
         
+        # HIỂN THỊ KẾT QUẢ
         if 'latest_wiki_content' in st.session_state:
-            with st.expander("👀 Xem trước nội dung Wiki", expanded=True):
+            with st.expander("👀 Xem trước nội dung Wiki (Đã đối chiếu)", expanded=True):
                 st.markdown(st.session_state.latest_wiki_content)
             
-            timestamp = time.strftime("%Y%m%d_%H%M")
-            default_filename = f"Roman_Wyckoff_FullWiki_{timestamp}.md"
-            
             st.download_button(
-                label="📥 TẢI FILE WIKI TỔNG HỢP NÀY VỀ MÁY",
+                label="📥 TẢI WIKI TỔNG HỢP VỀ MÁY",
                 data=st.session_state.latest_wiki_content,
-                file_name=default_filename,
+                file_name=f"Roman_Wyckoff_Correlated_Wiki.md",
                 mime="text/markdown",
                 type="primary"
             )
